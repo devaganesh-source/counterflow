@@ -41,7 +41,7 @@
             "States.ALL"
           ],
           "IntervalSeconds": 1,
-          "MaxAttempts": 2,
+          "MaxAttempts": 1,
           "BackoffRate": 1
         }
       ],

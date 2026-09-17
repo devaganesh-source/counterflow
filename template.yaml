@@ -64,8 +64,8 @@ Resources:
   CreateOrderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: services/create_order/
-      Handler: app.lambda_handler
+      CodeUri: .
+      Handler: services.create_order.app.lambda_handler
 
       Policies:
         - DynamoDBCrudPolicy:
@@ -75,8 +75,8 @@ Resources:
   ReserveInventoryFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: services/reserve_inventory/
-      Handler: app.lambda_handler
+      CodeUri: .
+      Handler: services.reserve_inventory.app.lambda_handler
 
       Policies:
         - DynamoDBCrudPolicy:
@@ -86,8 +86,8 @@ Resources:
   ChargePaymentFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: services/charge_payment/
-      Handler: app.lambda_handler
+      CodeUri: .
+      Handler: services.charge_payment.app.lambda_handler
 
       Policies:
         - DynamoDBCrudPolicy:
@@ -97,8 +97,8 @@ Resources:
   ConfirmOrderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: services/confirm_order/
-      Handler: app.lambda_handler
+      CodeUri: .
+      Handler: services.confirm_order.app.lambda_handler
 
       Policies:
         - DynamoDBCrudPolicy:
