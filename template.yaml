@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  CounterFlow serverless infrastructure.
+  DynamoDB + Lambda + Step Functions + API Gateway.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref CounterFlowTable
+
+
+Resources:
+
+  # ============================================================
+  # DynamoDB
+  # ============================================================
+
+  CounterFlowTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+
+  # ============================================================
+  # API Gateway
+  # ============================================================
+
+  CounterFlowApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: dev
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+
+  # ============================================================
+  # Checkout Lambdas
+  # ============================================================
+
+  CreateOrderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: services.create_order.app.lambda_handler
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CounterFlowTable
+
+
+  ReserveInventoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: services.reserve_inventory.app.lambda_handler
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CounterFlowTable
+
+
+  ChargePaymentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: services.charge_payment.app.lambda_handler
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CounterFlowTable
+
+
+  ConfirmOrderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: services.confirm_order.app.lambda_handler
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CounterFlowTable
+
+
+  # ============================================================
+  # Invariant Checker
+  # ============================================================
+
+  InvariantCheckerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: services/invariant_checker/
+      Handler: app.lambda_handler
+
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CounterFlowTable
+
+
+  # ============================================================
+  # Step Functions
+  # ============================================================
+
+  CheckoutStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+
+      DefinitionUri: statemachines/checkout.asl.json
+
+      DefinitionSubstitutions:
+        CreateOrderFunctionArn: !GetAtt CreateOrderFunction.Arn
+        ReserveInventoryFunctionArn: !GetAtt ReserveInventoryFunction.Arn
+        ChargePaymentFunctionArn: !GetAtt ChargePaymentFunction.Arn
+        ConfirmOrderFunctionArn: !GetAtt ConfirmOrderFunction.Arn
+
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CreateOrderFunction
+
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ReserveInventoryFunction
+
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ChargePaymentFunction
+
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ConfirmOrderFunction
+
+
+  # ============================================================
+  # Control API Lambda
+  # ============================================================
+
+  ControlApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: services/control_api/
+      Handler: app.lambda_handler
+
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CounterFlowTable
+          STATE_MACHINE_ARN: !GetAtt CheckoutStateMachine.Arn
+
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CounterFlowTable
+
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource:
+                - !GetAtt CheckoutStateMachine.Arn
+
+      Events:
+
+        StartRun:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CounterFlowApi
+            Path: /runs
+            Method: POST
+
+        GetRun:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CounterFlowApi
+            Path: /runs/{runId}
+            Method: GET
+
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  ApiUrl:
+    Description: CounterFlow API Gateway URL
+    Value: !Sub >
+      https://${CounterFlowApi}.execute-api.${AWS::Region}.amazonaws.com/dev/
+
+  TableName:
+    Description: CounterFlow DynamoDB table
+    Value: !Ref CounterFlowTable
+
+  StateMachineArn:
+    Description: Checkout Step Functions state machine
+    Value: !GetAtt CheckoutStateMachine.Arn
+  

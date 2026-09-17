@@ -1,0 +1,64 @@
+{
+  "Comment": "CounterFlow checkout workflow",
+  "StartAt": "CreateOrder",
+
+  "States": {
+
+    "CreateOrder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${CreateOrderFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Next": "ReserveInventory"
+    },
+
+    "ReserveInventory": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ReserveInventoryFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Next": "ChargePayment"
+    },
+
+    "ChargePayment": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ChargePaymentFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+
+      "Next": "ConfirmOrder"
+    },
+
+    "ConfirmOrder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ConfirmOrderFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "End": true
+    }
+
+  }
+}
