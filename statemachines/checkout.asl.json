@@ -12,6 +12,7 @@
       "OutputPath": "$.Payload",
       "Next": "ReserveInventory"
     },
+
     "ReserveInventory": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
@@ -22,6 +23,7 @@
       "OutputPath": "$.Payload",
       "Next": "ChargePayment"
     },
+
     "ChargePayment": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
@@ -37,7 +39,9 @@
           "attempt.$": "States.MathAdd($$.State.RetryCount, 1)"
         }
       },
+
       "OutputPath": "$.Payload",
+
       "Retry": [
         {
           "ErrorEquals": [
@@ -48,8 +52,19 @@
           "BackoffRate": 1
         }
       ],
+
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "PaymentFailed"
+        }
+      ],
+
       "Next": "ConfirmOrder"
     },
+
     "ConfirmOrder": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
@@ -69,6 +84,12 @@
       },
       "OutputPath": "$.Payload",
       "End": true
+    },
+
+    "PaymentFailed": {
+      "Type": "Fail",
+      "Error": "PaymentFailed",
+      "Cause": "ChargePayment failed after retry"
     }
   }
 }

@@ -13,7 +13,10 @@ def lambda_handler(event, context):
     order_id = event["orderId"]
     event_id = event["eventId"]
 
-    attempt = event.get("attempt", 1)
+    # ConfirmOrder is a separate workflow step.
+    # It should start at attempt 1 instead of inheriting
+    # ChargePayment's retry attempt number.
+    attempt = 1
 
     write_trace(
         run_id=run_id,
