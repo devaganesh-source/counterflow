@@ -294,3 +294,177 @@ def test_get_run_exposes_frontend_contract(monkeypatch):
 
     # Execution output is preserved too.
     assert body["output"]["status"] == "CONFIRMED"
+
+
+def test_get_run_exposes_fixed_success_contract(monkeypatch):
+    class FixedStepFunctions:
+        def describe_execution(self, executionArn):
+            return {
+                "executionArn": executionArn,
+                "status": "SUCCEEDED",
+                "startDate": datetime(
+                    2026, 9, 19, 3, 10, tzinfo=timezone.utc
+                ),
+                "stopDate": datetime(
+                    2026, 9, 19, 3, 11, tzinfo=timezone.utc
+                ),
+                "input": json.dumps(
+                    {
+                        "runId": "run_fixed_001",
+                        "orderId": "order_fixed_001",
+                        "eventId": "evt_fixed_001",
+                        "workflowVersion": "fixed",
+                        "faultPlanId": "payment-ack-lost-v1",
+                        "faultPlan": {
+                            "planId": "payment-ack-lost-v1",
+                            "planVersion": 1,
+                            "workflowVersion": "fixed",
+                            "faults": [
+                                {
+                                    "type": "AFTER_SIDE_EFFECT_TIMEOUT",
+                                    "target": "ChargePayment",
+                                    "attempt": 1,
+                                }
+                            ],
+                        },
+                    }
+                ),
+                "output": json.dumps(
+                    {
+                        "runId": "run_fixed_001",
+                        "orderId": "order_fixed_001",
+                        "status": "CONFIRMED",
+                    }
+                ),
+            }
+
+    class FixedTable:
+        def query(self, **kwargs):
+            return {
+                "Items": [
+                    {
+                        "PK": "RUN#run_fixed_001",
+                        "SK": "TRACE#00000006",
+                        "sequence": 6,
+                        "runId": "run_fixed_001",
+                        "orderId": "order_fixed_001",
+                        "component": "ChargePayment",
+                        "operation": "PaymentCharged",
+                        "attempt": 1,
+                        "phase": "SIDE_EFFECT_COMMITTED",
+                        "outcome": "SUCCESS",
+                        "evidence": {
+                            "chargeId": "charge_order_fixed_001",
+                            "amount": 999,
+                        },
+                    },
+                    {
+                        "PK": "RUN#run_fixed_001",
+                        "SK": "TRACE#00000009",
+                        "sequence": 9,
+                        "runId": "run_fixed_001",
+                        "orderId": "order_fixed_001",
+                        "component": "ChargePayment",
+                        "operation": "PaymentReused",
+                        "attempt": 2,
+                        "phase": "ATTEMPT_SUCCEEDED",
+                        "outcome": "SUCCESS",
+                        "evidence": {
+                            "chargeId": "charge_order_fixed_001",
+                            "idempotentReplay": True,
+                        },
+                    },
+                ]
+            }
+
+    class FixedDynamoDB:
+        def Table(self, table_name):
+            return FixedTable()
+
+    invariant = {
+        "invariantId": "charge-at-most-once",
+        "name": "ChargeAtMostOnce",
+        "status": "PASSED",
+        "expected": "<= 1",
+        "actual": 1,
+        "orderId": "order_fixed_001",
+        "firstFailingSequence": None,
+        "firstFailingOperation": None,
+        "firstFailingComponent": None,
+        "reason": None,
+        "expectedChargeCount": 1,
+        "actualChargeCount": 1,
+        "expectedAmount": 999,
+        "actualCharged": 999,
+        "overcharge": 0,
+        "chargeIds": ["charge_order_fixed_001"],
+    }
+
+    monkeypatch.setattr(
+        control_api,
+        "stepfunctions",
+        FixedStepFunctions(),
+    )
+
+    monkeypatch.setattr(
+        control_api,
+        "dynamodb",
+        FixedDynamoDB(),
+    )
+
+    monkeypatch.setattr(
+        control_api,
+        "get_execution_arn",
+        lambda run_id: (
+            "arn:aws:states:us-east-1:"
+            "123456789012:execution:"
+            f"CheckoutStateMachine:{run_id}"
+        ),
+    )
+
+    monkeypatch.setattr(
+        control_api,
+        "run_invariant_checker",
+        lambda run_id, order_id: invariant,
+    )
+
+    event = {
+        "httpMethod": "GET",
+        "pathParameters": {
+            "runId": "run_fixed_001",
+        },
+    }
+
+    response = control_api.lambda_handler(
+        event,
+        None,
+    )
+
+    assert response["statusCode"] == 200
+
+    body = json.loads(response["body"])
+
+    assert body["runId"] == "run_fixed_001"
+    assert body["status"] == "SUCCEEDED"
+    
+    assert len(body["traces"]) == 2
+    assert body["traces"][0]["operation"] == "PaymentCharged"
+    assert body["traces"][1]["operation"] == "PaymentReused"
+
+    returned_invariant = body["invariant"]
+    assert returned_invariant["status"] == "PASSED"
+    assert returned_invariant["expectedChargeCount"] == 1
+    assert returned_invariant["actualChargeCount"] == 1
+    assert returned_invariant["expectedAmount"] == 999
+    assert returned_invariant["actualCharged"] == 999
+    assert returned_invariant["overcharge"] == 0
+    assert returned_invariant["chargeIds"] == ["charge_order_fixed_001"]
+
+    assert body["traceAnalysis"] is None
+
+    fault_plan = body["faultPlan"]
+    assert fault_plan["type"] == "AFTER_SIDE_EFFECT_TIMEOUT"
+    assert fault_plan["target"] == "ChargePayment"
+    assert fault_plan["attempt"] == 1
+
+    assert body["output"]["status"] == "CONFIRMED"
