@@ -4,6 +4,7 @@ import uuid
 import boto3
 
 from shared.ledger import write_trace
+from shared.fault_plan import should_inject_fault
 
 dynamodb = boto3.resource("dynamodb")
 
@@ -30,8 +31,6 @@ def lambda_handler(event, context):
         outcome="SUCCESS",
     )
 
-    # For now this is intentionally the simple baseline implementation.
-    # Later we will modify this into the buggy retry implementation.
     charge_id = f"charge_{uuid.uuid4().hex[:10]}"
 
     table.put_item(
@@ -62,6 +61,29 @@ def lambda_handler(event, context):
             "amount": amount,
         },
     )
+
+    # Inject deliberate fault after the side effect is committed
+    if should_inject_fault(
+        event,
+        fault_type="AFTER_SIDE_EFFECT_TIMEOUT",
+        target="ChargePayment",
+        attempt=attempt,
+    ):
+        write_trace(
+            run_id=run_id,
+            component="ChargePayment",
+            operation="InjectedFailure",
+            order_id=order_id,
+            event_id=event_id,
+            attempt=attempt,
+            phase="ATTEMPT_FAILED",
+            outcome="FAILURE",
+            evidence={
+                "faultType": "AFTER_SIDE_EFFECT_TIMEOUT",
+                "chargeId": charge_id,
+            },
+        )
+        raise RuntimeError("Injected AFTER_SIDE_EFFECT_TIMEOUT after payment side effect")
 
     event["chargeId"] = charge_id
 

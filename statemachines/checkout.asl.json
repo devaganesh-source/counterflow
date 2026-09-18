@@ -1,9 +1,7 @@
 {
   "Comment": "CounterFlow checkout workflow",
   "StartAt": "CreateOrder",
-
   "States": {
-
     "CreateOrder": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
@@ -14,7 +12,6 @@
       "OutputPath": "$.Payload",
       "Next": "ReserveInventory"
     },
-
     "ReserveInventory": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
@@ -25,16 +22,22 @@
       "OutputPath": "$.Payload",
       "Next": "ChargePayment"
     },
-
     "ChargePayment": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
         "FunctionName": "${ChargePaymentFunctionArn}",
-        "Payload.$": "$"
+        "Payload": {
+          "runId.$": "$.runId",
+          "orderId.$": "$.orderId",
+          "eventId.$": "$.eventId",
+          "sku.$": "$.sku",
+          "amount.$": "$.amount",
+          "faultPlan.$": "$.faultPlan",
+          "attempt.$": "States.MathAdd($$.State.RetryCount, 1)"
+        }
       },
       "OutputPath": "$.Payload",
-
       "Retry": [
         {
           "ErrorEquals": [
@@ -45,10 +48,8 @@
           "BackoffRate": 1
         }
       ],
-
       "Next": "ConfirmOrder"
     },
-
     "ConfirmOrder": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
@@ -59,6 +60,5 @@
       "OutputPath": "$.Payload",
       "End": true
     }
-
   }
 }
