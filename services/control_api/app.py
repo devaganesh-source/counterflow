@@ -106,7 +106,7 @@ def start_run(event):
         }
     else:
         # Allows custom fault plans for testing,
-        # including the Catch-path test.
+        # including Catch-path testing.
         workflow_input.setdefault(
             "faultPlan",
             {},
@@ -160,7 +160,14 @@ def run_invariant_checker(
             f"Invariant checker failed: {payload}"
         )
 
-    return payload
+    # Main's deterministic invariant checker
+    # preserves the result under invariantResult.
+    # The fallback keeps compatibility with the
+    # older direct-result response.
+    return payload.get(
+        "invariantResult",
+        payload,
+    )
 
 
 def build_fault_plan_info(execution_input):
@@ -211,6 +218,35 @@ def build_fault_plan_info(execution_input):
         "target": fault.get("target"),
         "attempt": fault.get("attempt"),
         "hash": plan_hash,
+    }
+
+
+def build_trace_analysis(invariant):
+    if not invariant:
+        return None
+
+    first_failing_sequence = (
+        invariant.get(
+            "firstFailingSequence"
+        )
+    )
+
+    if first_failing_sequence is None:
+        return None
+
+    return {
+        "firstFailingSequence":
+            first_failing_sequence,
+        "firstFailingOperation":
+            invariant.get(
+                "firstFailingOperation"
+            ),
+        "firstFailingComponent":
+            invariant.get(
+                "firstFailingComponent"
+            ),
+        "reason":
+            invariant.get("reason"),
     }
 
 
@@ -280,7 +316,7 @@ def get_run(event):
     )
 
     # Read the original workflow input once.
-    # It contains the fault plan used for this run.
+    # This contains the exact fault plan used.
     execution_input = json.loads(
         execution.get("input")
         or "{}"
@@ -293,6 +329,7 @@ def get_run(event):
     )
 
     invariant = None
+    trace_analysis = None
 
     terminal_statuses = {
         "SUCCEEDED",
@@ -314,6 +351,15 @@ def get_run(event):
                 )
             )
 
+            # The backend invariant checker decides
+            # the first failing side effect.
+            # The frontend only visualizes this result.
+            trace_analysis = (
+                build_trace_analysis(
+                    invariant
+                )
+            )
+
     result = {
         "runId": run_id,
         "status": execution["status"],
@@ -325,6 +371,7 @@ def get_run(event):
         "traces": traces,
         "invariant": invariant,
         "faultPlan": fault_plan_info,
+        "traceAnalysis": trace_analysis,
     }
 
     if execution.get("stopDate"):

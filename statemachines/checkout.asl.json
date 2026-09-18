@@ -73,6 +73,16 @@
         "Payload.$": "$"
       },
       "OutputPath": "$.Payload",
+      "Next": "InvariantChecker"
+    },
+    "InvariantChecker": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${InvariantCheckerFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
       "End": true
     },
 

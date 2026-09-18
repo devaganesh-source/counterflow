@@ -1,50 +1,100 @@
 import os
 
 import boto3
-from boto3.dynamodb.conditions import Key
 
 
 dynamodb = boto3.resource("dynamodb")
 
 
-def lambda_handler(event, context):
-    table = dynamodb.Table(os.environ["TABLE_NAME"])
-
-    run_id = event["runId"]
-    order_id = event["orderId"]
-
-    pk = f"RUN#{run_id}#ORDER#{order_id}"
-
+def get_trace(table, run_id):
     response = table.query(
-        KeyConditionExpression=Key("PK").eq(pk)
+        KeyConditionExpression="PK = :pk AND begins_with(SK, :trace)",
+        ExpressionAttributeValues={
+            ":pk": f"RUN#{run_id}",
+            ":trace": "TRACE#",
+        },
     )
 
-    items = response.get("Items", [])
-
-    order_item = next(
-        (
-            item
-            for item in items
-            if item.get("SK") == "ORDER"
-        ),
-        None,
+    return sorted(
+        response.get("Items", []),
+        key=lambda item: int(item["sequence"]),
     )
 
-    charge_items = [
-        item
-        for item in items
-        if item.get("SK", "").startswith("CHARGE#")
-    ]
 
-    expected_amount = int(
-        (order_item or {}).get("amount", 0)
-    )
+def evaluate_charge_at_most_once(trace, order_id):
+    charge_count = 0
+    charge_ids = []
+    charged_amounts = []
 
-    actual_charge_count = len(charge_items)
+    expected_amount = None
+
+    first_failing_sequence = None
+    first_failing_operation = None
+    first_failing_component = None
+
+    # Determine the expected order amount from the trace.
+    for entry in trace:
+        if (
+            entry.get("operation") == "OrderCreated"
+            and entry.get("orderId") == order_id
+            and entry.get("phase") == "SIDE_EFFECT_COMMITTED"
+        ):
+            evidence = entry.get("evidence", {})
+
+            if evidence.get("amount") is not None:
+                expected_amount = int(
+                    evidence["amount"]
+                )
+
+            break
+
+    # Deterministically evaluate ChargeAtMostOnce
+    # from committed payment side effects.
+    for entry in trace:
+        if (
+            entry.get("operation") == "PaymentCharged"
+            and entry.get("orderId") == order_id
+            and entry.get("phase") == "SIDE_EFFECT_COMMITTED"
+        ):
+            charge_count += 1
+
+            evidence = entry.get("evidence", {})
+
+            charge_id = evidence.get("chargeId")
+            if charge_id:
+                charge_ids.append(charge_id)
+
+            amount = evidence.get("amount")
+            if amount is not None:
+                charged_amounts.append(
+                    int(amount)
+                )
+
+            if (
+                charge_count > 1
+                and first_failing_sequence is None
+            ):
+                first_failing_sequence = int(
+                    entry["sequence"]
+                )
+                first_failing_operation = (
+                    entry.get("operation")
+                )
+                first_failing_component = (
+                    entry.get("component")
+                )
+
+    # Fallback only if an OrderCreated amount
+    # was not present in the trace.
+    if expected_amount is None:
+        expected_amount = (
+            charged_amounts[0]
+            if charged_amounts
+            else 0
+        )
 
     actual_charged = sum(
-        int(item.get("amount", 0))
-        for item in charge_items
+        charged_amounts
     )
 
     overcharge = max(
@@ -52,29 +102,75 @@ def lambda_handler(event, context):
         0,
     )
 
-    charge_ids = [
-        item.get("chargeId")
-        for item in charge_items
-        if item.get("chargeId")
-    ]
+    passed = charge_count <= 1
 
-    invariant_passed = (
-        actual_charge_count <= 1
-    )
+    reason = None
+
+    if not passed:
+        reason = (
+            "ChargeAtMostOnce violated: "
+            "more than one committed payment "
+            "charge exists for the order"
+        )
 
     return {
+        # Deterministic invariant fields from main
+        "invariantId": "charge-at-most-once",
         "name": "ChargeAtMostOnce",
         "status": (
             "PASSED"
-            if invariant_passed
+            if passed
             else "FAILED"
         ),
-        "expectedChargeCount": 1,
-        "actualChargeCount": actual_charge_count,
-        "expectedAmount": expected_amount,
-        "actualCharged": actual_charged,
-        "overcharge": overcharge,
-        "chargeIds": charge_ids,
-        "runId": run_id,
+        "expected": "<= 1",
+        "actual": charge_count,
         "orderId": order_id,
+        "firstFailingSequence":
+            first_failing_sequence,
+
+        # Trace-analysis metadata for the UI
+        "firstFailingOperation":
+            first_failing_operation,
+        "firstFailingComponent":
+            first_failing_component,
+        "reason": reason,
+
+        # Business-impact fields for the UI
+        "expectedChargeCount": 1,
+        "actualChargeCount":
+            charge_count,
+        "expectedAmount":
+            expected_amount,
+        "actualCharged":
+            actual_charged,
+        "overcharge":
+            overcharge,
+        "chargeIds":
+            charge_ids,
     }
+
+
+def lambda_handler(event, context):
+    table = dynamodb.Table(
+        os.environ["TABLE_NAME"]
+    )
+
+    run_id = event["runId"]
+    order_id = event["orderId"]
+
+    trace = get_trace(
+        table,
+        run_id,
+    )
+
+    result = evaluate_charge_at_most_once(
+        trace,
+        order_id,
+    )
+
+    result["runId"] = run_id
+
+    # Preserve the contract introduced on main.
+    event["invariantResult"] = result
+
+    return event
