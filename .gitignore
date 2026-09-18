@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .env
 .aws-sam/
+/input*.json
+/values.json
+/charge-values*.json
+/trace-values*.json
