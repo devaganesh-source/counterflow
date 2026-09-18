@@ -596,3 +596,83 @@ def test_post_runs_starts_fixed_workflow(monkeypatch):
         workflow_version="fixed",
         suffix="fixed_001",
     )
+
+
+def test_post_runs_rejects_invalid_json():
+    event = {
+        "httpMethod": "POST",
+        "body": "{not-valid-json",
+    }
+    response = control_api.lambda_handler(
+        event,
+        None,
+    )
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert body["message"] == (
+        "Request body must be valid JSON"
+    )
+
+
+def test_post_runs_rejects_missing_workflow_version():
+    event = {
+        "httpMethod": "POST",
+        "body": json.dumps(
+            {
+                "faultPlanId": "payment-ack-lost-v1",
+            }
+        ),
+    }
+    response = control_api.lambda_handler(
+        event,
+        None,
+    )
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert body["message"] == (
+        "workflowVersion must be buggy or fixed"
+    )
+
+
+def test_post_runs_rejects_invalid_workflow_version():
+    event = {
+        "httpMethod": "POST",
+        "body": json.dumps(
+            {
+                "workflowVersion": "broken",
+                "faultPlanId": "payment-ack-lost-v1",
+            }
+        ),
+    }
+    response = control_api.lambda_handler(
+        event,
+        None,
+    )
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert body["message"] == (
+        "workflowVersion must be buggy or fixed"
+    )
+
+
+def test_get_run_rejects_missing_run_id():
+    event = {
+        "httpMethod": "GET",
+        "pathParameters": {},
+    }
+    response = control_api.lambda_handler(
+        event,
+        None,
+    )
+    assert response["statusCode"] == 400
+
+
+def test_api_rejects_unsupported_method():
+    event = {
+        "httpMethod": "DELETE",
+    }
+    response = control_api.lambda_handler(
+        event,
+        None,
+    )
+    assert response["statusCode"] == 405
