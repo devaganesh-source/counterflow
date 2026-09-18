@@ -71,9 +71,22 @@ def start_run(event):
     workflow_input["orderId"] = order_id
     workflow_input["eventId"] = event_id
 
-    # Required by the current checkout workflow
     workflow_input.setdefault("sku", "SKU-001")
-    workflow_input.setdefault("faultPlan", {})
+
+    fault_plan_id = body.get("faultPlanId")
+
+    if fault_plan_id == "payment-ack-lost-v1":
+        workflow_input["faultPlan"] = {
+            "faults": [
+                {
+                    "type": "AFTER_SIDE_EFFECT_TIMEOUT",
+                    "target": "ChargePayment",
+                    "attempt": 1,
+                }
+            ]
+        }
+    else:
+        workflow_input.setdefault("faultPlan", {})
 
     execution = stepfunctions.start_execution(
         stateMachineArn=STATE_MACHINE_ARN,
