@@ -468,3 +468,131 @@ def test_get_run_exposes_fixed_success_contract(monkeypatch):
     assert fault_plan["attempt"] == 1
 
     assert body["output"]["status"] == "CONFIRMED"
+
+
+class RecordingStepFunctions:
+    def __init__(self):
+        self.calls = []
+
+    def start_execution(self, **kwargs):
+        self.calls.append(kwargs)
+        return {
+            "executionArn": (
+                "arn:aws:states:us-east-1:"
+                "123456789012:execution:"
+                "CheckoutStateMachine:"
+                f"{kwargs['name']}"
+            )
+        }
+
+
+def run_post_contract_test(
+    monkeypatch,
+    workflow_version,
+    suffix,
+):
+    recorder = RecordingStepFunctions()
+    monkeypatch.setattr(
+        control_api,
+        "stepfunctions",
+        recorder,
+    )
+
+    generated_ids = iter(
+        [
+            f"run_{suffix}",
+            f"order_{suffix}",
+            f"event_{suffix}",
+        ]
+    )
+    monkeypatch.setattr(
+        control_api.uuid,
+        "uuid4",
+        lambda: next(generated_ids),
+    )
+
+    event = {
+        "httpMethod": "POST",
+        "body": json.dumps(
+            {
+                "workflowVersion": workflow_version,
+                "faultPlanId": "payment-ack-lost-v1",
+            }
+        ),
+    }
+
+    response = control_api.lambda_handler(
+        event,
+        None,
+    )
+
+    assert response["statusCode"] == 202
+    body = json.loads(response["body"])
+
+    assert body["runId"] == f"run_{suffix}"
+    assert body["orderId"] == f"order_{suffix}"
+    assert body["eventId"] == f"event_{suffix}"
+    assert body["status"] == "RUNNING"
+    assert body["statusUrl"] == (
+        f"/runs/run_{suffix}"
+    )
+
+    assert len(recorder.calls) == 1
+    call = recorder.calls[0]
+
+    assert (
+        call["stateMachineArn"]
+        == control_api.STATE_MACHINE_ARN
+    )
+    assert call["name"] == f"run_{suffix}"
+
+    workflow_input = json.loads(
+        call["input"]
+    )
+
+    assert (
+        workflow_input["runId"]
+        == f"run_{suffix}"
+    )
+    assert (
+        workflow_input["orderId"]
+        == f"order_{suffix}"
+    )
+    assert (
+        workflow_input["eventId"]
+        == f"event_{suffix}"
+    )
+    assert (
+        workflow_input["workflowVersion"]
+        == workflow_version
+    )
+    assert (
+        workflow_input["faultPlanId"]
+        == "payment-ack-lost-v1"
+    )
+    assert workflow_input["sku"] == "SKU-001"
+    assert workflow_input["faultPlan"] == {
+        "faults": [
+            {
+                "type": "AFTER_SIDE_EFFECT_TIMEOUT",
+                "target": "ChargePayment",
+                "attempt": 1,
+            }
+        ]
+    }
+
+
+def test_post_runs_starts_buggy_workflow(monkeypatch):
+    run_post_contract_test(
+        monkeypatch,
+        workflow_version="buggy",
+        suffix="buggy_001",
+    )
+
+
+def test_post_runs_starts_fixed_workflow(monkeypatch):
+    run_post_contract_test(
+        monkeypatch,
+        workflow_version="fixed",
+        suffix="fixed_001",
+    )
