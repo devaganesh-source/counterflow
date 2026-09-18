@@ -35,6 +35,7 @@
           "eventId.$": "$.eventId",
           "sku.$": "$.sku",
           "amount.$": "$.amount",
+          "workflowVersion.$": "$.workflowVersion",
           "faultPlan.$": "$.faultPlan",
           "attempt.$": "States.MathAdd($$.State.RetryCount, 1)"
         }
