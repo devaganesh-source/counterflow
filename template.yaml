@@ -135,6 +135,7 @@ Resources:
         ReserveInventoryFunctionArn: !GetAtt ReserveInventoryFunction.Arn
         ChargePaymentFunctionArn: !GetAtt ChargePaymentFunction.Arn
         ConfirmOrderFunctionArn: !GetAtt ConfirmOrderFunction.Arn
+        InvariantCheckerFunctionArn: !GetAtt InvariantCheckerFunction.Arn
 
       Policies:
         - LambdaInvokePolicy:
@@ -148,6 +149,9 @@ Resources:
 
         - LambdaInvokePolicy:
             FunctionName: !Ref ConfirmOrderFunction
+            
+        - LambdaInvokePolicy:
+            FunctionName: !Ref InvariantCheckerFunction
 
 
   # ============================================================
@@ -211,4 +215,3 @@ Outputs:
   StateMachineArn:
     Description: Checkout Step Functions state machine
     Value: !GetAtt CheckoutStateMachine.Arn
-  
