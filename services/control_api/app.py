@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import uuid
@@ -104,8 +105,8 @@ def start_run(event):
             ]
         }
     else:
-        # This also lets us send custom fault plans
-        # directly for Catch-path testing.
+        # Allows custom fault plans for testing,
+        # including the Catch-path test.
         workflow_input.setdefault(
             "faultPlan",
             {},
@@ -160,6 +161,57 @@ def run_invariant_checker(
         )
 
     return payload
+
+
+def build_fault_plan_info(execution_input):
+    fault_plan = execution_input.get(
+        "faultPlan",
+        {},
+    )
+
+    faults = fault_plan.get(
+        "faults",
+        [],
+    )
+
+    if not faults:
+        return None
+
+    fault = faults[0]
+
+    # Canonical JSON guarantees that the same
+    # fault plan always produces the same hash.
+    canonical_plan = json.dumps(
+        fault_plan,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    plan_hash = hashlib.sha256(
+        canonical_plan.encode("utf-8")
+    ).hexdigest()
+
+    fault_plan_id = execution_input.get(
+        "faultPlanId",
+        "unknown",
+    )
+
+    if (
+        fault_plan_id
+        == "payment-ack-lost-v1"
+    ):
+        name = "Payment acknowledgement lost"
+    else:
+        name = fault_plan_id
+
+    return {
+        "name": name,
+        "planId": fault_plan_id,
+        "type": fault.get("type"),
+        "target": fault.get("target"),
+        "attempt": fault.get("attempt"),
+        "hash": plan_hash,
+    }
 
 
 def get_run(event):
@@ -227,6 +279,19 @@ def get_run(event):
         [],
     )
 
+    # Read the original workflow input once.
+    # It contains the fault plan used for this run.
+    execution_input = json.loads(
+        execution.get("input")
+        or "{}"
+    )
+
+    fault_plan_info = (
+        build_fault_plan_info(
+            execution_input
+        )
+    )
+
     invariant = None
 
     terminal_statuses = {
@@ -237,11 +302,6 @@ def get_run(event):
     }
 
     if execution["status"] in terminal_statuses:
-        execution_input = json.loads(
-            execution.get("input")
-            or "{}"
-        )
-
         order_id = execution_input.get(
             "orderId"
         )
@@ -264,6 +324,7 @@ def get_run(event):
             .isoformat(),
         "traces": traces,
         "invariant": invariant,
+        "faultPlan": fault_plan_info,
     }
 
     if execution.get("stopDate"):

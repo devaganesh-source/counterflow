@@ -26,6 +26,15 @@ export interface InvariantResult {
   orderId: string;
 }
 
+export interface FaultPlanInfo {
+  name: string;
+  planId: string;
+  type: string;
+  target: string;
+  attempt: number;
+  hash: string;
+}
+
 export interface RunResponse {
   runId: string;
   orderId?: string;
@@ -38,6 +47,7 @@ export interface RunResponse {
   output?: unknown;
   traces?: Trace[];
   invariant?: InvariantResult | null;
+  faultPlan?: FaultPlanInfo | null;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
