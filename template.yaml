@@ -176,6 +176,11 @@ Resources:
               Resource:
                 - !GetAtt CheckoutStateMachine.Arn
 
+            - Effect: Allow
+              Action:
+                - states:DescribeExecution
+              Resource: "*"
+
       Events:
 
         StartRun:
