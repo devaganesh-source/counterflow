@@ -1,7 +1,5 @@
 import os
-
 import boto3
-
 
 dynamodb = boto3.resource("dynamodb")
 
@@ -191,8 +189,9 @@ def lambda_handler(event, context):
         order_id,
     )
 
-trace_analysis = build_trace_analysis(trace, result)
-result["runId"] = run_id
+    # Indentation fixed here (4 spaces)
+    trace_analysis = build_trace_analysis(trace, result)
+    result["runId"] = run_id
 
     # Preserve the contract introduced on main.
     event["invariantResult"] = result
