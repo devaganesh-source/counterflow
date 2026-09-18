@@ -4,6 +4,9 @@ export interface RunResponse {
   runId: string;
   status: string;
   statusUrl: string;
+  startDate?: string;
+  stopDate?: string;
+  output?: unknown;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -26,6 +29,18 @@ export async function startRun(
 
   if (!response.ok) {
     throw new Error(data.message || "Failed to start resilience test");
+  }
+
+  return data;
+}
+
+export async function getRun(runId: string): Promise<RunResponse> {
+  const response = await fetch(`${API_BASE_URL}/runs/${runId}`);
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to fetch run");
   }
 
   return data;
