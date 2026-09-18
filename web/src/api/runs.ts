@@ -35,6 +35,13 @@ export interface FaultPlanInfo {
   hash: string;
 }
 
+export interface TraceAnalysis {
+  firstFailingSequence: number;
+  firstFailingOperation?: string;
+  firstFailingComponent?: string;
+  reason?: string;
+}
+
 export interface RunResponse {
   runId: string;
   orderId?: string;
@@ -48,6 +55,7 @@ export interface RunResponse {
   traces?: Trace[];
   invariant?: InvariantResult | null;
   faultPlan?: FaultPlanInfo | null;
+  traceAnalysis?: TraceAnalysis | null;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
