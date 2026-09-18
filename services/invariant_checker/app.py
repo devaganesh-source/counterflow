@@ -150,6 +150,29 @@ def evaluate_charge_at_most_once(trace, order_id):
     }
 
 
+def build_trace_analysis(trace, invariant_result):
+    first_failing_sequence = invariant_result.get("firstFailingSequence")
+    
+    if first_failing_sequence is None:
+        return {
+            "firstFailingSequence": None,
+            "firstFailingOperation": None,
+            "firstFailingComponent": None,
+            "reason": None,
+        }
+
+    failing_entry = next(
+        (entry for entry in trace if int(entry["sequence"]) == first_failing_sequence), None
+    )
+
+    return {
+        "firstFailingSequence": first_failing_sequence,
+        "firstFailingOperation": (failing_entry.get("operation") if failing_entry else None),
+        "firstFailingComponent": (failing_entry.get("component") if failing_entry else None),
+        "reason": "ChargeAtMostOnce violated",
+    }
+
+
 def lambda_handler(event, context):
     table = dynamodb.Table(
         os.environ["TABLE_NAME"]
@@ -168,9 +191,11 @@ def lambda_handler(event, context):
         order_id,
     )
 
-    result["runId"] = run_id
+trace_analysis = build_trace_analysis(trace, result)
+result["runId"] = run_id
 
     # Preserve the contract introduced on main.
     event["invariantResult"] = result
+    event["traceAnalysis"] = trace_analysis
 
     return event
