@@ -13,6 +13,19 @@ export interface Trace {
   evidence?: Record<string, unknown>;
 }
 
+export interface InvariantResult {
+  name: string;
+  status: "PASSED" | "FAILED";
+  expectedChargeCount: number;
+  actualChargeCount: number;
+  expectedAmount: number;
+  actualCharged: number;
+  overcharge: number;
+  chargeIds: string[];
+  runId: string;
+  orderId: string;
+}
+
 export interface RunResponse {
   runId: string;
   orderId?: string;
@@ -24,6 +37,7 @@ export interface RunResponse {
   stopDate?: string;
   output?: unknown;
   traces?: Trace[];
+  invariant?: InvariantResult | null;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;

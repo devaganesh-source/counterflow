@@ -29,12 +29,14 @@ Resources:
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
+
         - AttributeName: SK
           AttributeType: S
 
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
+
         - AttributeName: SK
           KeyType: RANGE
 
@@ -51,6 +53,7 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       StageName: dev
+
       Cors:
         AllowMethods: "'GET,POST,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization'"
@@ -164,12 +167,21 @@ Resources:
         Variables:
           TABLE_NAME: !Ref CounterFlowTable
           STATE_MACHINE_ARN: !GetAtt CheckoutStateMachine.Arn
+          INVARIANT_CHECKER_FUNCTION: !Ref InvariantCheckerFunction
 
       Policies:
+
+        # Read trace data from DynamoDB
         - DynamoDBReadPolicy:
             TableName: !Ref CounterFlowTable
 
+        # Invoke the invariant checker
+        - LambdaInvokePolicy:
+            FunctionName: !Ref InvariantCheckerFunction
+
+        # Start and inspect Step Functions executions
         - Statement:
+
             - Effect: Allow
               Action:
                 - states:StartExecution
@@ -216,4 +228,3 @@ Outputs:
   StateMachineArn:
     Description: Checkout Step Functions state machine
     Value: !GetAtt CheckoutStateMachine.Arn
-  
