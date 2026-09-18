@@ -2,6 +2,7 @@ import os
 import time
 import uuid
 import boto3
+from botocore.exceptions import ClientError
 
 from shared.ledger import write_trace
 from shared.fault_plan import should_inject_fault
@@ -31,10 +32,15 @@ def lambda_handler(event, context):
         outcome="SUCCESS",
     )
 
-    charge_id = f"charge_{uuid.uuid4().hex[:10]}"
+    workflow_version = event.get(
+        "workflowVersion", event.get("faultPlan", {}).get("workflowVersion", "buggy")
+    )
 
-    table.put_item(
-        Item={
+    if workflow_version == "fixed":
+        # Deterministic order-scoped payment identity.
+        charge_id = f"charge_{order_id}"
+        
+        charge_item = {
             "PK": f"RUN#{run_id}#ORDER#{order_id}",
             "SK": f"CHARGE#{charge_id}",
             "runId": run_id,
@@ -44,23 +50,82 @@ def lambda_handler(event, context):
             "status": "CHARGED",
             "expiresAt": int(time.time()) + 86400,
         }
-    )
+        
+        try:
+            table.put_item(
+                Item=charge_item,
+                ConditionExpression=("attribute_not_exists(PK) AND attribute_not_exists(SK)"),
+            )
+            
+            # This invocation actually created the side effect.
+            write_trace(
+                run_id=run_id,
+                component="ChargePayment",
+                operation="PaymentCharged",
+                order_id=order_id,
+                event_id=event_id,
+                attempt=attempt,
+                phase="SIDE_EFFECT_COMMITTED",
+                outcome="SUCCESS",
+                evidence={
+                    "chargeId": charge_id,
+                    "amount": amount,
+                },
+            )
+            
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
+                
+            # The retry found the payment already committed.
+            # Do NOT record another PaymentCharged event.
+            write_trace(
+                run_id=run_id,
+                component="ChargePayment",
+                operation="PaymentReused",
+                order_id=order_id,
+                event_id=event_id,
+                attempt=attempt,
+                phase="ATTEMPT_SUCCEEDED",
+                outcome="SUCCESS",
+                evidence={
+                    "chargeId": charge_id,
+                    "idempotentReplay": True,
+                },
+            )
+            
+    else:
+        # Existing intentionally buggy implementation.
+        charge_id = f"charge_{uuid.uuid4().hex[:10]}"
 
-    # This is the important business side effect.
-    write_trace(
-        run_id=run_id,
-        component="ChargePayment",
-        operation="PaymentCharged",
-        order_id=order_id,
-        event_id=event_id,
-        attempt=attempt,
-        phase="SIDE_EFFECT_COMMITTED",
-        outcome="SUCCESS",
-        evidence={
-            "chargeId": charge_id,
-            "amount": amount,
-        },
-    )
+        table.put_item(
+            Item={
+                "PK": f"RUN#{run_id}#ORDER#{order_id}",
+                "SK": f"CHARGE#{charge_id}",
+                "runId": run_id,
+                "orderId": order_id,
+                "chargeId": charge_id,
+                "amount": amount,
+                "status": "CHARGED",
+                "expiresAt": int(time.time()) + 86400,
+            }
+        )
+
+        # This is the important business side effect.
+        write_trace(
+            run_id=run_id,
+            component="ChargePayment",
+            operation="PaymentCharged",
+            order_id=order_id,
+            event_id=event_id,
+            attempt=attempt,
+            phase="SIDE_EFFECT_COMMITTED",
+            outcome="SUCCESS",
+            evidence={
+                "chargeId": charge_id,
+                "amount": amount,
+            },
+        )
 
     # Inject deliberate fault after the side effect is committed
     if should_inject_fault(
