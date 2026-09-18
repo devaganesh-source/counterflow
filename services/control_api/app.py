@@ -73,6 +73,15 @@ def start_run(event):
     else:
         body = raw_body
 
+    workflow_version = body.get("workflowVersion")
+    if workflow_version not in {"buggy", "fixed"}:
+        return api_response(
+            400,
+            {
+                "message": "workflowVersion must be buggy or fixed"
+            },
+        )
+
     run_id = str(uuid.uuid4())
     order_id = str(uuid.uuid4())
     event_id = str(uuid.uuid4())
