@@ -1,14 +1,25 @@
 import json
 import os
 import uuid
+from decimal import Decimal
 
 import boto3
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 
+dynamodb = boto3.resource("dynamodb")
 stepfunctions = boto3.client("stepfunctions")
 
+TABLE_NAME = os.environ["TABLE_NAME"]
 STATE_MACHINE_ARN = os.environ["STATE_MACHINE_ARN"]
+
+
+def json_default(value):
+    if isinstance(value, Decimal):
+        return int(value) if value % 1 == 0 else float(value)
+
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 def api_response(status_code, body):
@@ -18,15 +29,18 @@ def api_response(status_code, body):
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
         },
-        "body": json.dumps(body),
+        "body": json.dumps(body, default=json_default),
     }
 
 
 def get_execution_arn(run_id):
-    # Example state machine ARN:
+    # Example:
     # arn:aws:states:us-east-1:123456789:stateMachine:CheckoutStateMachine-xxx
 
-    prefix, state_machine_name = STATE_MACHINE_ARN.rsplit(":stateMachine:", 1)
+    prefix, state_machine_name = STATE_MACHINE_ARN.rsplit(
+        ":stateMachine:",
+        1,
+    )
 
     return f"{prefix}:execution:{state_machine_name}:{run_id}"
 
@@ -35,39 +49,33 @@ def start_run(event):
     raw_body = event.get("body") or "{}"
 
     if isinstance(raw_body, str):
-        body = json.loads(raw_body)
+        try:
+            body = json.loads(raw_body)
+        except json.JSONDecodeError:
+            return api_response(
+                400,
+                {"message": "Request body must be valid JSON"},
+            )
     else:
         body = raw_body
 
-    workflow_version = body.get("workflowVersion")
-    fault_plan_id = body.get("faultPlanId")
-
-    if workflow_version not in ["buggy", "fixed"]:
-        return api_response(
-            400,
-            {
-                "message": "workflowVersion must be 'buggy' or 'fixed'"
-            },
-        )
-
-    if not fault_plan_id:
-        return api_response(
-            400,
-            {
-                "message": "faultPlanId is required"
-            },
-        )
-
     run_id = str(uuid.uuid4())
+    order_id = str(uuid.uuid4())
+    event_id = str(uuid.uuid4())
 
-    workflow_input = {
-        "runId": run_id,
-        "orderId": run_id,
-        "workflowVersion": workflow_version,
-        "faultPlanId": fault_plan_id,
-    }
+    # Preserve fields coming from the UI such as:
+    # workflowVersion, faultPlanId, faultPlan, etc.
+    workflow_input = dict(body)
 
-    stepfunctions.start_execution(
+    workflow_input["runId"] = run_id
+    workflow_input["orderId"] = order_id
+    workflow_input["eventId"] = event_id
+
+    # Required by the current checkout workflow
+    workflow_input.setdefault("sku", "SKU-001")
+    workflow_input.setdefault("faultPlan", {})
+
+    execution = stepfunctions.start_execution(
         stateMachineArn=STATE_MACHINE_ARN,
         name=run_id,
         input=json.dumps(workflow_input),
@@ -77,6 +85,9 @@ def start_run(event):
         202,
         {
             "runId": run_id,
+            "orderId": order_id,
+            "eventId": event_id,
+            "executionArn": execution["executionArn"],
             "status": "RUNNING",
             "statusUrl": f"/runs/{run_id}",
         },
@@ -90,9 +101,7 @@ def get_run(event):
     if not run_id:
         return api_response(
             400,
-            {
-                "message": "runId is required"
-            },
+            {"message": "runId is required"},
         )
 
     execution_arn = get_execution_arn(run_id)
@@ -101,24 +110,6 @@ def get_run(event):
         execution = stepfunctions.describe_execution(
             executionArn=execution_arn
         )
-
-        result = {
-            "runId": run_id,
-            "status": execution["status"],
-            "statusUrl": f"/runs/{run_id}",
-            "startDate": execution["startDate"].isoformat(),
-        }
-
-        if execution.get("stopDate"):
-            result["stopDate"] = execution["stopDate"].isoformat()
-
-        if execution.get("output"):
-            try:
-                result["output"] = json.loads(execution["output"])
-            except json.JSONDecodeError:
-                result["output"] = execution["output"]
-
-        return api_response(200, result)
 
     except ClientError as error:
         error_code = error.response["Error"]["Code"]
@@ -133,6 +124,36 @@ def get_run(event):
             )
 
         raise
+
+    table = dynamodb.Table(TABLE_NAME)
+
+    trace_result = table.query(
+        KeyConditionExpression=(
+            Key("PK").eq(f"RUN#{run_id}")
+            & Key("SK").begins_with("TRACE#")
+        )
+    )
+
+    traces = trace_result.get("Items", [])
+
+    result = {
+        "runId": run_id,
+        "status": execution["status"],
+        "statusUrl": f"/runs/{run_id}",
+        "startDate": execution["startDate"].isoformat(),
+        "traces": traces,
+    }
+
+    if execution.get("stopDate"):
+        result["stopDate"] = execution["stopDate"].isoformat()
+
+    if execution.get("output"):
+        try:
+            result["output"] = json.loads(execution["output"])
+        except json.JSONDecodeError:
+            result["output"] = execution["output"]
+
+    return api_response(200, result)
 
 
 def lambda_handler(event, context):
@@ -149,14 +170,6 @@ def lambda_handler(event, context):
             405,
             {
                 "message": f"Method {method} not allowed"
-            },
-        )
-
-    except json.JSONDecodeError:
-        return api_response(
-            400,
-            {
-                "message": "Request body must be valid JSON"
             },
         )
 
