@@ -86,5 +86,8 @@ def lambda_handler(event, context):
         raise RuntimeError("Injected AFTER_SIDE_EFFECT_TIMEOUT after payment side effect")
 
     event["chargeId"] = charge_id
+    
+    # Prevent 'attempt' counter from propagating to ConfirmOrder
+    event.pop("attempt", None)
 
     return event
