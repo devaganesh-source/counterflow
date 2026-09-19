@@ -19,46 +19,49 @@ function ComparisonPage() {
 
   if (!buggyRun || !fixedRun) {
     return (
-      <main
-        style={{
-          padding: "40px",
-          fontFamily: "Arial",
-          maxWidth: "900px",
-          margin: "auto",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "13px",
-            fontWeight: 800,
-            letterSpacing: "2px",
-            color: "#475569",
-          }}
-        >
-          COUNTERFLOW
-        </div>
+      <main className="cf-compare-page">
+        <header className="cf-compare-header">
+          <div className="cf-result-topline">
+            <div className="cf-brand">
+              <div className="cf-logo">CF</div>
 
-        <h1>Buggy vs Fixed</h1>
+              <div>
+                <strong>CounterFlow</strong>
+                <span>RESILIENCE TESTING</span>
+              </div>
+            </div>
+          </div>
 
-        <p style={{ color: "#64748b" }}>
-          Comparison data is not available yet.
-        </p>
+          <div className="cf-compare-hero">
+            <div className="cf-section-label">
+              RESILIENCE COMPARISON
+            </div>
 
-        <p style={{ color: "#64748b" }}>
-          A comparison will appear here after the same stored fault
-          has been executed against both workflow versions.
-        </p>
+            <h1>Buggy vs Fixed</h1>
 
-        <button
-          onClick={() => navigate("/")}
-          style={{
-            padding: "10px 20px",
-            marginTop: "20px",
-            cursor: "pointer",
-          }}
-        >
-          Back to launcher
-        </button>
+            <p>
+              Comparison data is not available yet.
+            </p>
+          </div>
+        </header>
+
+        <section className="cf-compare-empty">
+          <div className="cf-compare-empty-icon">!</div>
+
+          <h2>No comparison data</h2>
+
+          <p>
+            Run the same stored fault against both workflow
+            versions before opening this comparison.
+          </p>
+
+          <button
+            className="cf-secondary-button"
+            onClick={() => navigate("/")}
+          >
+            ← Back to launcher
+          </button>
+        </section>
       </main>
     );
   }
@@ -72,61 +75,62 @@ function ComparisonPage() {
     buggyHash === fixedHash;
 
   return (
-    <main
-      style={{
-        padding: "40px",
-        fontFamily: "Arial",
-        maxWidth: "1100px",
-        margin: "auto",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "13px",
-          fontWeight: 800,
-          letterSpacing: "2px",
-          color: "#475569",
-        }}
-      >
-        COUNTERFLOW
-      </div>
+    <main className="cf-compare-page">
+      <header className="cf-compare-header">
+        <div className="cf-result-topline">
+          <div className="cf-brand">
+            <div className="cf-logo">CF</div>
 
-      <h1 style={{ marginBottom: "8px" }}>
-        Buggy vs Fixed
-      </h1>
+            <div>
+              <strong>CounterFlow</strong>
+              <span>RESILIENCE TESTING</span>
+            </div>
+          </div>
 
-      <p
-        style={{
-          marginTop: 0,
-          color: "#64748b",
-        }}
-      >
-        Compare both workflow versions under the same tested fault.
-      </p>
+          <div className="cf-analysis-status">
+            <span />
+            COMPARISON COMPLETE
+          </div>
+        </div>
 
-      <section
-        style={{
-          marginTop: "28px",
-          padding: "20px",
-          borderRadius: "12px",
-          border: hashesMatch
-            ? "1px solid #16a34a"
-            : "1px solid #dc2626",
-          background: hashesMatch
-            ? "#f0fdf4"
-            : "#fff1f2",
-        }}
-      >
-        <strong>
-          Fault snapshot verification
-        </strong>
+        <div className="cf-compare-hero">
+          <div className="cf-section-label">
+            RESILIENCE TEST RESULT
+          </div>
 
-        <p style={{ marginBottom: 0 }}>
-          {hashesMatch
-            ? "✓ Both runs used the same stored fault-plan hash."
-            : "⚠ The two runs do not have matching fault-plan hashes."}
-        </p>
-      </section>
+          <h1>Same fault. Different outcome.</h1>
+
+          <p>
+            The exact stored failure is replayed against both
+            workflow versions to prove whether the fix changes
+            business correctness.
+          </p>
+        </div>
+
+        <div
+          className={`cf-snapshot-banner ${
+            hashesMatch ? "verified" : "mismatch"
+          }`}
+        >
+          <div className="cf-snapshot-icon">
+            {hashesMatch ? "✓" : "!"}
+          </div>
+
+          <div>
+            <strong>
+              {hashesMatch
+                ? "Same stored fault verified"
+                : "Fault snapshot mismatch"}
+            </strong>
+
+            <span>
+              {hashesMatch
+                ? "Both executions used the same stored fault-plan hash."
+                : "The two executions do not have matching fault-plan hashes."}
+            </span>
+          </div>
+        </div>
+      </header>
 
       <ComparisonCard
         buggyRun={buggyRun}
@@ -138,15 +142,46 @@ function ComparisonPage() {
         fixedRun={fixedRun}
       />
 
-      <div
-        style={{
-          display: "flex",
-          gap: "12px",
-          marginTop: "30px",
-          flexWrap: "wrap",
-        }}
-      >
+      <section className="cf-compare-conclusion">
+        <div>
+          <div className="cf-section-label">
+            EXPERIMENT CONCLUSION
+          </div>
+
+          <h2>
+            The retry stayed. The duplicate charge didn't.
+          </h2>
+
+          <p>
+            Under the same injected payment acknowledgement
+            failure, the fixed workflow reuses the existing
+            charge instead of committing another payment side
+            effect.
+          </p>
+        </div>
+
+        <div className="cf-conclusion-proof">
+          <div>
+            <span>BUGGY</span>
+            <strong className="cf-danger-text">
+              2 charges
+            </strong>
+          </div>
+
+          <div className="cf-conclusion-arrow">→</div>
+
+          <div>
+            <span>FIXED</span>
+            <strong className="cf-success-text">
+              1 charge
+            </strong>
+          </div>
+        </div>
+      </section>
+
+      <div className="cf-compare-actions">
         <button
+          className="cf-secondary-button"
           onClick={() =>
             navigate(`/run/${buggyRun.runId}/result`, {
               state: {
@@ -155,15 +190,12 @@ function ComparisonPage() {
               },
             })
           }
-          style={{
-            padding: "10px 20px",
-            cursor: "pointer",
-          }}
         >
           View Buggy Result
         </button>
 
         <button
+          className="cf-primary-button"
           onClick={() =>
             navigate(`/run/${fixedRun.runId}/result`, {
               state: {
@@ -172,20 +204,13 @@ function ComparisonPage() {
               },
             })
           }
-          style={{
-            padding: "10px 20px",
-            cursor: "pointer",
-          }}
         >
-          View Fixed Result
+          View Fixed Result →
         </button>
 
         <button
+          className="cf-secondary-button"
           onClick={() => navigate("/")}
-          style={{
-            padding: "10px 20px",
-            cursor: "pointer",
-          }}
         >
           Start another test
         </button>

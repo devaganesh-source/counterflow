@@ -69,178 +69,210 @@ function ComparisonCard({
     sameDefinition;
 
   return (
-    <section
-      style={{
-        marginTop: "32px",
-        padding: "28px",
-        borderRadius: "14px",
-        border: "1px solid #cbd5e1",
-        background: "#ffffff",
-      }}
-    >
-      <h2 style={{ marginTop: 0 }}>
-        Buggy vs Fixed
-      </h2>
+    <section className="cf-comparison-card">
+      <div className="cf-comparison-heading">
+        <div>
+          <div className="cf-section-label">
+            OUTCOME COMPARISON
+          </div>
 
-      <p
-        style={{
-          color: "#64748b",
-          marginBottom: "24px",
-        }}
-      >
-        Both workflow versions are compared under the
-        same stored failure schedule.
-      </p>
+          <h2>Buggy vs Fixed</h2>
 
-      <section
-        style={{
-          padding: "20px",
-          marginBottom: "28px",
-          borderRadius: "12px",
-          border: sameFaultSnapshot
-            ? "2px solid #16a34a"
-            : "2px solid #dc2626",
-          background: sameFaultSnapshot
-            ? "#f0fdf4"
-            : "#fff1f2",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>
-          Fault Plan Verification
-        </h3>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.2fr 1fr 1fr",
-            gap: "14px 24px",
-            alignItems: "center",
-          }}
-        >
-          <strong></strong>
-          <strong>BUGGY</strong>
-          <strong>FIXED</strong>
-
-          <span>Plan ID</span>
-          <code>
-            {buggyFault?.planId ?? "Unavailable"}
-          </code>
-          <code>
-            {fixedFault?.planId ?? "Unavailable"}
-          </code>
-
-          <span>Fault type</span>
-          <code>
-            {buggyFault?.type ?? "Unavailable"}
-          </code>
-          <code>
-            {fixedFault?.type ?? "Unavailable"}
-          </code>
-
-          <span>Target</span>
-          <span>
-            {buggyFault?.target ?? "Unavailable"}
-          </span>
-          <span>
-            {fixedFault?.target ?? "Unavailable"}
-          </span>
-
-          <span>Attempt</span>
-          <span>
-            {buggyFault?.attempt ?? "Unavailable"}
-          </span>
-          <span>
-            {fixedFault?.attempt ?? "Unavailable"}
-          </span>
-
-          <span>SHA-256</span>
-          <code title={buggyFault?.hash}>
-            {shortHash(buggyFault?.hash)}
-          </code>
-          <code title={fixedFault?.hash}>
-            {shortHash(fixedFault?.hash)}
-          </code>
+          <p>
+            Same failure schedule. Same retry pressure.
+            Different business outcome.
+          </p>
         </div>
 
-        <div
-          style={{
-            marginTop: "22px",
-            padding: "12px",
-            borderRadius: "8px",
-            textAlign: "center",
-            fontWeight: 800,
-            color: sameFaultSnapshot
-              ? "#15803d"
-              : "#b91c1c",
-          }}
+        <span
+          className={`cf-fault-match-badge ${
+            sameFaultSnapshot
+              ? "verified"
+              : "mismatch"
+          }`}
         >
           {sameFaultSnapshot
-            ? "✓ SAME STORED FAULT SNAPSHOT"
-            : "⚠ FAULT SNAPSHOTS DO NOT MATCH"}
+            ? "✓ SAME FAULT"
+            : "! FAULT MISMATCH"}
+        </span>
+      </div>
+
+      <div className="cf-outcome-columns">
+        <div className="cf-outcome-card buggy">
+          <div className="cf-outcome-card-header">
+            <div>
+              <span>WORKFLOW VERSION</span>
+              <h3>BUGGY</h3>
+            </div>
+
+            <div className="cf-outcome-icon">✕</div>
+          </div>
+
+          <div className="cf-outcome-metrics">
+            <div>
+              <span>CHARGE ATTEMPTS</span>
+              <strong>{buggyAttempts}</strong>
+            </div>
+
+            <div>
+              <span>COMMITTED CHARGES</span>
+              <strong className="cf-danger-text">
+                {buggyCharges}
+              </strong>
+            </div>
+          </div>
+
+          <div className="cf-outcome-result">
+            <span>BUSINESS INVARIANT</span>
+
+            <strong className="cf-danger-text">
+              ✕ {buggyInvariant}
+            </strong>
+
+            <small>
+              Duplicate payment side effect committed
+            </small>
+          </div>
         </div>
-      </section>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.3fr 1fr 1fr",
-          gap: "14px 24px",
-          alignItems: "center",
-        }}
-      >
-        <strong></strong>
-        <strong>BUGGY</strong>
-        <strong>FIXED</strong>
+        <div className="cf-vs-divider">
+          <span>VS</span>
+        </div>
 
-        <span>Charge attempts</span>
-        <strong>{buggyAttempts}</strong>
-        <strong>{fixedAttempts}</strong>
+        <div className="cf-outcome-card fixed">
+          <div className="cf-outcome-card-header">
+            <div>
+              <span>WORKFLOW VERSION</span>
+              <h3>FIXED</h3>
+            </div>
 
-        <span>Committed charges</span>
-        <strong>{buggyCharges}</strong>
-        <strong>{fixedCharges}</strong>
+            <div className="cf-outcome-icon">✓</div>
+          </div>
 
-        <span>Invariant</span>
+          <div className="cf-outcome-metrics">
+            <div>
+              <span>CHARGE ATTEMPTS</span>
+              <strong>{fixedAttempts}</strong>
+            </div>
 
-        <strong
-          style={{
-            color:
-              buggyInvariant === "FAILED"
-                ? "#b91c1c"
-                : "#15803d",
-          }}
+            <div>
+              <span>COMMITTED CHARGES</span>
+              <strong className="cf-success-text">
+                {fixedCharges}
+              </strong>
+            </div>
+          </div>
+
+          <div className="cf-outcome-result">
+            <span>BUSINESS INVARIANT</span>
+
+            <strong className="cf-success-text">
+              ✓ {fixedInvariant}
+            </strong>
+
+            <small>
+              Retry completed without duplicate payment
+            </small>
+          </div>
+        </div>
+      </div>
+
+      <div className="cf-fault-proof">
+        <div className="cf-fault-proof-heading">
+          <div>
+            <div className="cf-section-label">
+              CONTROLLED EXPERIMENT
+            </div>
+
+            <h3>Fault snapshot verification</h3>
+          </div>
+
+          <strong
+            className={
+              sameFaultSnapshot
+                ? "cf-success-text"
+                : "cf-danger-text"
+            }
+          >
+            {sameFaultSnapshot
+              ? "VERIFIED"
+              : "MISMATCH"}
+          </strong>
+        </div>
+
+        <div className="cf-fault-proof-grid">
+          <div className="cf-proof-header">
+            <span>FAULT PROPERTY</span>
+            <strong>BUGGY</strong>
+            <strong>FIXED</strong>
+          </div>
+
+          <div className="cf-proof-row">
+            <span>Plan ID</span>
+            <code>
+              {buggyFault?.planId ?? "Unavailable"}
+            </code>
+            <code>
+              {fixedFault?.planId ?? "Unavailable"}
+            </code>
+          </div>
+
+          <div className="cf-proof-row">
+            <span>Fault type</span>
+            <code>
+              {buggyFault?.type ?? "Unavailable"}
+            </code>
+            <code>
+              {fixedFault?.type ?? "Unavailable"}
+            </code>
+          </div>
+
+          <div className="cf-proof-row">
+            <span>Target</span>
+            <code>
+              {buggyFault?.target ?? "Unavailable"}
+            </code>
+            <code>
+              {fixedFault?.target ?? "Unavailable"}
+            </code>
+          </div>
+
+          <div className="cf-proof-row">
+            <span>Attempt</span>
+            <code>
+              {buggyFault?.attempt ?? "Unavailable"}
+            </code>
+            <code>
+              {fixedFault?.attempt ?? "Unavailable"}
+            </code>
+          </div>
+
+          <div className="cf-proof-row">
+            <span>SHA-256</span>
+            <code title={buggyFault?.hash}>
+              {shortHash(buggyFault?.hash)}
+            </code>
+            <code title={fixedFault?.hash}>
+              {shortHash(fixedFault?.hash)}
+            </code>
+          </div>
+        </div>
+
+        <div
+          className={`cf-fault-proof-result ${
+            sameFaultSnapshot
+              ? "verified"
+              : "mismatch"
+          }`}
         >
-          {buggyInvariant}
-        </strong>
+          {sameFaultSnapshot ? "✓" : "!"}
 
-        <strong
-          style={{
-            color:
-              fixedInvariant === "PASSED"
-                ? "#15803d"
-                : "#b91c1c",
-          }}
-        >
-          {fixedInvariant}
-        </strong>
-
-        <span>Outcome</span>
-
-        <strong
-          style={{
-            color: "#b91c1c",
-          }}
-        >
-          UNSAFE
-        </strong>
-
-        <strong
-          style={{
-            color: "#15803d",
-          }}
-        >
-          CORRECT UNDER TESTED FAULT
-        </strong>
+          <span>
+            {sameFaultSnapshot
+              ? "Both executions used the same stored fault snapshot."
+              : "Fault snapshots differ. This comparison is not controlled."}
+          </span>
+        </div>
       </div>
     </section>
   );

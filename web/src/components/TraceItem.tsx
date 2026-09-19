@@ -24,6 +24,7 @@ function TraceItem({
   let title = trace.component;
   let message = trace.operation;
   let icon = "✓";
+  let kind = "success";
 
   if (trace.operation === "OrderCreated") {
     title = "Create Order";
@@ -44,12 +45,14 @@ function TraceItem({
     title = "Charge Payment";
     message = "Existing payment reused";
     icon = "↻";
+    kind = "reused";
   }
 
   if (trace.operation === "InjectedFailure") {
     title = "Fault Injection";
     message = "Payment acknowledgement lost";
     icon = "⚡";
+    kind = "fault";
   }
 
   if (trace.operation === "OrderConfirmed") {
@@ -59,100 +62,80 @@ function TraceItem({
 
   const isFailure = trace.outcome === "FAILURE";
 
-  return (
-    <div
-      style={{
-        padding: "16px",
-        marginBottom: "12px",
-        borderRadius: "10px",
-        border: isFirstViolation
-          ? "2px solid #dc2626"
-          : isFailure
-            ? "1px solid #f59e0b"
-            : "1px solid #ddd",
-        background: isFirstViolation
-          ? "#fff1f2"
-          : isFailure
-            ? "#fff7ed"
-            : "#f8fafc",
-        boxShadow: isFirstViolation
-          ? "0 0 0 3px rgba(220, 38, 38, 0.08)"
-          : "none",
-      }}
-    >
-      {isFirstViolation && (
-        <div
-          style={{
-            display: "inline-block",
-            marginBottom: "12px",
-            padding: "5px 9px",
-            borderRadius: "6px",
-            background: "#dc2626",
-            color: "white",
-            fontSize: "12px",
-            fontWeight: 800,
-            letterSpacing: "0.5px",
-          }}
-        >
-          ⚠ FIRST FAILING SIDE EFFECT
-        </div>
-      )}
+  if (isFailure) {
+    kind = "fault";
+  }
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "20px",
-        }}
-      >
-        <strong>
-          #{trace.sequence} {title}
-        </strong>
-        <span>Attempt {trace.attempt}</span>
+  if (isFirstViolation) {
+    kind = "violation";
+    icon = "✕";
+  }
+
+  return (
+    <article
+      className={`cf-trace-item ${kind} ${
+        isFirstViolation
+          ? "first-violation"
+          : ""
+      }`}
+    >
+      <div className="cf-trace-rail">
+        <div className="cf-trace-icon">
+          {icon}
+        </div>
       </div>
 
-      <p style={{ margin: "8px 0 4px", fontWeight: 600 }}>
-        {icon} {message}
-      </p>
+      <div className="cf-trace-main">
+        <div className="cf-trace-heading">
+          <div>
+            <span className="cf-trace-sequence">
+              #{trace.sequence}
+            </span>
 
-      {isFirstViolation && violationReason && (
-        <p
-          style={{
-            margin: "10px 0",
-            padding: "10px 12px",
-            borderRadius: "6px",
-            background: "#fee2e2",
-            color: "#991b1b",
-            fontWeight: 700,
-          }}
-        >
-          {violationReason}
-        </p>
-      )}
+            <strong>{title}</strong>
+          </div>
 
-      {chargeId && (
-        <p style={{ margin: "4px 0" }}>
-          <strong>Charge:</strong> {chargeId}
-        </p>
-      )}
+          <span className="cf-trace-attempt">
+            ATTEMPT {trace.attempt}
+          </span>
+        </div>
 
-      {faultType && (
-        <p style={{ margin: "4px 0" }}>
-          <strong>Fault:</strong> {faultType}
-        </p>
-      )}
+        <div className="cf-trace-message">
+          {message}
+        </div>
 
-      <p
-        style={{
-          margin: "6px 0 0",
-          fontSize: "13px",
-          color: "#64748b",
-        }}
-      >
-        {trace.component} · {trace.phase} · {trace.outcome}
-      </p>
-    </div>
+        <div className="cf-trace-evidence">
+          {chargeId && (
+            <div>
+              <span>CHARGE</span>
+              <code>{chargeId}</code>
+            </div>
+          )}
+
+          {faultType && (
+            <div>
+              <span>FAULT</span>
+              <code>{faultType}</code>
+            </div>
+          )}
+        </div>
+
+        {isFirstViolation && violationReason && (
+          <div className="cf-trace-violation-reason">
+            <span>FIRST FAILING SIDE EFFECT</span>
+            <strong>{violationReason}</strong>
+          </div>
+        )}
+
+        <div className="cf-trace-metadata">
+          <span>{trace.component}</span>
+          <i />
+          <span>{trace.phase}</span>
+          <i />
+          <span>{trace.outcome}</span>
+        </div>
+      </div>
+    </article>
   );
 }
 

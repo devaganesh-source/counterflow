@@ -31,6 +31,7 @@ function FirstFailingPrefix({
         title: "Create Order",
         detail: "OrderCreated",
         icon: "✓",
+        kind: "success",
       };
     }
 
@@ -39,6 +40,7 @@ function FirstFailingPrefix({
         title: "Reserve Inventory",
         detail: "InventoryReserved",
         icon: "✓",
+        kind: "success",
       };
     }
 
@@ -47,17 +49,21 @@ function FirstFailingPrefix({
         title: "Fault Injected",
         detail: "Payment acknowledgement lost",
         icon: "⚡",
+        kind: "fault",
       };
     }
 
     if (trace.operation === "PaymentCharged") {
+      const firstViolation =
+        trace.sequence === firstFailingSequence;
+
       return {
         title: `Charge Payment — Attempt ${trace.attempt}`,
         detail: "PaymentCharged",
-        icon:
-          trace.sequence === firstFailingSequence
-            ? "✕"
-            : "✓",
+        icon: firstViolation ? "✕" : "✓",
+        kind: firstViolation
+          ? "violation"
+          : "success",
       };
     }
 
@@ -66,6 +72,7 @@ function FirstFailingPrefix({
         title: `Charge Payment — Attempt ${trace.attempt}`,
         detail: "Existing payment reused",
         icon: "↻",
+        kind: "reused",
       };
     }
 
@@ -73,178 +80,89 @@ function FirstFailingPrefix({
       title: trace.component,
       detail: trace.operation,
       icon: "✓",
+      kind: "success",
     };
   }
 
   return (
-    <section
-      style={{
-        marginTop: "32px",
-        marginBottom: "32px",
-        padding: "28px",
-        borderRadius: "16px",
-        border: "2px solid #dc2626",
-        background: "#fff7f7",
-      }}
-    >
-      <div
-        style={{
-          marginBottom: "24px",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "13px",
-            fontWeight: 800,
-            letterSpacing: "2px",
-            color: "#991b1b",
-          }}
-        >
-          FAILURE LOCALIZATION
-        </div>
-
-        <h2
-          style={{
-            marginBottom: "6px",
-          }}
-        >
-          First Failing Prefix
-        </h2>
-
-        <p
-          style={{
-            marginTop: 0,
-            color: "#64748b",
-          }}
-        >
-          The exact observed execution prefix where the invariant
-          changes from valid to violated.
+    <div className="cf-prefix">
+      <div className="cf-prefix-intro">
+        <p>
+          The exact observed execution prefix where the
+          invariant changes from valid to violated.
         </p>
       </div>
 
-      {prefixTraces.map((trace) => {
-        const details = getTraceDetails(trace);
+      <div className="cf-prefix-chain">
+        {prefixTraces.map((trace, index) => {
+          const details = getTraceDetails(trace);
 
-        const isFirstViolation =
-          trace.sequence === firstFailingSequence;
+          const isFirstViolation =
+            trace.sequence === firstFailingSequence;
 
-        const chargeId =
-          typeof trace.evidence?.chargeId === "string"
-            ? trace.evidence.chargeId
-            : null;
+          const chargeId =
+            typeof trace.evidence?.chargeId === "string"
+              ? trace.evidence.chargeId
+              : null;
 
-        return (
-          <div
-            key={trace.sequence}
-            style={{
-              padding: "16px",
-              marginBottom: "12px",
-              borderRadius: "10px",
-              border: isFirstViolation
-                ? "3px solid #dc2626"
-                : "1px solid #cbd5e1",
-              background: isFirstViolation
-                ? "#fee2e2"
-                : "#ffffff",
-            }}
-          >
+          return (
             <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "55px 1fr auto",
-                gap: "14px",
-                alignItems: "center",
-              }}
+              className="cf-prefix-step-wrapper"
+              key={trace.sequence}
             >
-              <strong>
-                #{trace.sequence}
-              </strong>
-
-              <div>
-                <strong>
-                  {details.title}
-                </strong>
-
-                <div
-                  style={{
-                    marginTop: "4px",
-                    color: "#475569",
-                  }}
-                >
-                  {details.detail}
+              <div
+                className={`cf-prefix-step ${details.kind} ${
+                  isFirstViolation
+                    ? "first-violation"
+                    : ""
+                }`}
+              >
+                <div className="cf-prefix-sequence">
+                  #{trace.sequence}
                 </div>
 
-                {chargeId && (
-                  <code
-                    style={{
-                      display: "block",
-                      marginTop: "8px",
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    {chargeId}
-                  </code>
+                <div className="cf-prefix-content">
+                  <strong>{details.title}</strong>
+
+                  <span>{details.detail}</span>
+
+                  {chargeId && (
+                    <code>{chargeId}</code>
+                  )}
+                </div>
+
+                <div className="cf-prefix-icon">
+                  {details.icon}
+                </div>
+
+                {isFirstViolation && (
+                  <div className="cf-first-violation-tag">
+                    FIRST INVARIANT VIOLATION
+                  </div>
                 )}
               </div>
 
-              <strong
-                style={{
-                  fontSize: "22px",
-                  color: isFirstViolation
-                    ? "#b91c1c"
-                    : "#15803d",
-                }}
-              >
-                {details.icon}
-              </strong>
+              {index < prefixTraces.length - 1 && (
+                <div className="cf-prefix-connector" />
+              )}
             </div>
-
-            {isFirstViolation && (
-              <div
-                style={{
-                  marginTop: "16px",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  background: "#dc2626",
-                  color: "white",
-                  textAlign: "center",
-                  fontWeight: 900,
-                  letterSpacing: "0.5px",
-                }}
-              >
-                ↑ FIRST INVARIANT VIOLATION
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
 
       {violationReason && (
-        <div
-          style={{
-            marginTop: "20px",
-            padding: "16px",
-            borderRadius: "10px",
-            background: "#fee2e2",
-            color: "#991b1b",
-            fontWeight: 700,
-          }}
-        >
-          {violationReason}
+        <div className="cf-violation-reason">
+          <span>WHY IT FAILED</span>
+          <strong>{violationReason}</strong>
         </div>
       )}
 
-      <p
-        style={{
-          marginBottom: 0,
-          marginTop: "20px",
-          fontSize: "13px",
-          color: "#64748b",
-        }}
-      >
-        Failure location is supplied by backend trace analysis.
-      </p>
-    </section>
+      <div className="cf-backend-proof">
+        <span>◎</span>
+        Failure location supplied by backend trace
+        analysis.
+      </div>
+    </div>
   );
 }
 
