@@ -142,6 +142,129 @@ def start_run(event):
     )
 
 
+def compare_run(event):
+    path_parameters = (
+        event.get("pathParameters") or {}
+    )
+
+    source_run_id = path_parameters.get("runId")
+
+    if not source_run_id:
+        return api_response(
+            400,
+            {
+                "message":
+                    "runId is required to compare"
+            },
+        )
+
+    raw_body = event.get("body") or "{}"
+    if isinstance(raw_body, str):
+        try:
+            body = json.loads(raw_body)
+        except json.JSONDecodeError:
+            body = {}
+    else:
+        body = raw_body
+
+    client_token = body.get("clientRequestToken")
+
+    execution_arn = get_execution_arn(source_run_id)
+
+    try:
+        execution = stepfunctions.describe_execution(
+            executionArn=execution_arn
+        )
+
+    except ClientError as error:
+        error_code = (
+            error.response["Error"]["Code"]
+        )
+
+        if error_code == "ExecutionDoesNotExist":
+            return api_response(
+                404,
+                {
+                    "message": "Source run not found",
+                    "runId": source_run_id,
+                },
+            )
+
+        raise
+
+    source_input = json.loads(
+        execution.get("input") or "{}"
+    )
+
+    if client_token:
+        # Generate deterministic UUIDs if a token is provided
+        namespace = uuid.uuid5(uuid.NAMESPACE_DNS, f"{source_run_id}-{client_token}")
+        run_id = str(uuid.uuid5(namespace, "run"))
+        order_id = str(uuid.uuid5(namespace, "order"))
+        event_id = str(uuid.uuid5(namespace, "event"))
+    else:
+        run_id = str(uuid.uuid4())
+        order_id = str(uuid.uuid4())
+        event_id = str(uuid.uuid4())
+
+    workflow_input = {
+        "runId": run_id,
+        "orderId": order_id,
+        "eventId": event_id,
+        # Force the workflow version to fixed
+        "workflowVersion": "fixed",
+        "sku": source_input.get("sku", "SKU-001"),
+    }
+
+    # Copy the exact fault plan object and ID 
+    # from the original execution to ensure parity.
+    if "faultPlanId" in source_input:
+        workflow_input["faultPlanId"] = source_input["faultPlanId"]
+        
+    if "faultPlan" in source_input:
+        workflow_input["faultPlan"] = source_input["faultPlan"]
+
+    fault_plan_hash = None
+    if "faultPlanHash" in source_input:
+        fault_plan_hash = source_input["faultPlanHash"]
+        workflow_input["faultPlanHash"] = fault_plan_hash
+    elif "faultPlan" in workflow_input:
+        fault_plan_hash = calculate_fault_plan_hash(workflow_input["faultPlan"])
+        workflow_input["faultPlanHash"] = fault_plan_hash
+
+    new_execution_arn = get_execution_arn(run_id)
+
+    try:
+        stepfunctions.start_execution(
+            stateMachineArn=STATE_MACHINE_ARN,
+            name=run_id,
+            input=json.dumps(workflow_input),
+        )
+    except ClientError as error:
+        error_code = error.response.get("Error", {}).get("Code")
+        if error_code != "ExecutionAlreadyExists":
+            raise
+
+    response_payload = {
+        "sourceRunId": source_run_id,
+        "runId": run_id,
+        "orderId": order_id,
+        "eventId": event_id,
+        "workflowVersion": "fixed",
+        "executionArn": new_execution_arn,
+        "status": "RUNNING",
+        "statusUrl": f"/runs/{run_id}",
+    }
+
+    if fault_plan_hash is not None:
+        response_payload["faultPlanHash"] = fault_plan_hash
+
+    return api_response(
+        202,
+        response_payload,
+    )
+
+
 def run_invariant_checker(
     run_id,
     order_id,
@@ -179,6 +302,15 @@ def run_invariant_checker(
     )
 
 
+def calculate_fault_plan_hash(fault_plan):
+    canonical_plan = json.dumps(
+        fault_plan,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical_plan.encode("utf-8")).hexdigest()
+
+
 def build_fault_plan_info(execution_input):
     fault_plan = execution_input.get(
         "faultPlan",
@@ -195,17 +327,7 @@ def build_fault_plan_info(execution_input):
 
     fault = faults[0]
 
-    # Canonical JSON guarantees that the same
-    # fault plan always produces the same hash.
-    canonical_plan = json.dumps(
-        fault_plan,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-    plan_hash = hashlib.sha256(
-        canonical_plan.encode("utf-8")
-    ).hexdigest()
+    plan_hash = calculate_fault_plan_hash(fault_plan)
 
     fault_plan_id = execution_input.get(
         "faultPlanId",
@@ -413,8 +535,13 @@ def lambda_handler(event, context):
             "httpMethod",
             "",
         )
+        resource = event.get("resource", "")
+        path = event.get("path", "")
 
         if method == "POST":
+            # Route to compare_run if the path/resource ends with /compare
+            if resource.endswith("/compare") or path.endswith("/compare"):
+                return compare_run(event)
             return start_run(event)
 
         if method == "GET":
