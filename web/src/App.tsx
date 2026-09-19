@@ -16,7 +16,15 @@ const TERMINAL_STATUSES = [
   "ABORTED",
 ];
 
-function TraceItem({ trace }: { trace: Trace }) {
+function TraceItem({
+  trace,
+  isFirstViolation,
+  violationReason,
+}: {
+  trace: Trace;
+  isFirstViolation: boolean;
+  violationReason?: string | null;
+}) {
   const chargeId =
     typeof trace.evidence?.chargeId === "string"
       ? trace.evidence.chargeId
@@ -46,6 +54,12 @@ function TraceItem({ trace }: { trace: Trace }) {
     message = "Payment charged";
   }
 
+  if (trace.operation === "PaymentReused") {
+    title = "Charge Payment";
+    message = "Existing payment reused";
+    icon = "↻";
+  }
+
   if (trace.operation === "InjectedFailure") {
     title = "Fault Injection";
     message = "Payment acknowledgement lost";
@@ -65,10 +79,37 @@ function TraceItem({ trace }: { trace: Trace }) {
         padding: "16px",
         marginBottom: "12px",
         borderRadius: "8px",
-        border: "1px solid #ddd",
-        background: isFailure ? "#fff7ed" : "#f8fafc",
+        border: isFirstViolation
+          ? "2px solid #dc2626"
+          : "1px solid #ddd",
+        background: isFirstViolation
+          ? "#fff1f2"
+          : isFailure
+            ? "#fff7ed"
+            : "#f8fafc",
+        boxShadow: isFirstViolation
+          ? "0 0 0 3px rgba(220, 38, 38, 0.08)"
+          : "none",
       }}
     >
+      {isFirstViolation && (
+        <div
+          style={{
+            display: "inline-block",
+            marginBottom: "12px",
+            padding: "5px 9px",
+            borderRadius: "6px",
+            background: "#dc2626",
+            color: "white",
+            fontSize: "12px",
+            fontWeight: 800,
+            letterSpacing: "0.5px",
+          }}
+        >
+          ⚠ FIRST FAILING SIDE EFFECT
+        </div>
+      )}
+
       <div
         style={{
           display: "flex",
@@ -92,6 +133,21 @@ function TraceItem({ trace }: { trace: Trace }) {
       >
         {icon} {message}
       </p>
+
+      {isFirstViolation && violationReason && (
+        <p
+          style={{
+            margin: "10px 0",
+            padding: "10px 12px",
+            borderRadius: "6px",
+            background: "#fee2e2",
+            color: "#991b1b",
+            fontWeight: 700,
+          }}
+        >
+          {violationReason}
+        </p>
+      )}
 
       {chargeId && (
         <p style={{ margin: "4px 0" }}>
@@ -274,7 +330,8 @@ function InvariantResultCard({
             fontSize: "24px",
           }}
         >
-          1 ORDER → {invariant.actualChargeCount} CHARGES
+          1 ORDER → {invariant.actualChargeCount}{" "}
+          {invariant.actualChargeCount === 1 ? "CHARGE" : "CHARGES"}
         </h3>
       </div>
 
@@ -466,10 +523,17 @@ function App() {
   if (run) {
     const traces = run.traces ?? [];
 
+    const firstFailingSequence =
+      run.traceAnalysis?.firstFailingSequence ?? null;
+
+    const violationReason =
+      run.traceAnalysis?.reason ?? null;
+
     const importantTraces = traces.filter(
       (trace) =>
         trace.phase === "SIDE_EFFECT_COMMITTED" ||
-        trace.phase === "ATTEMPT_FAILED"
+        trace.phase === "ATTEMPT_FAILED" ||
+        trace.operation === "PaymentReused"
     );
 
     const sortedImportantTraces = [
@@ -572,14 +636,24 @@ function App() {
             Waiting for trace events...
           </p>
         ) : (
-          sortedImportantTraces.map(
-            (trace) => (
+          sortedImportantTraces.map((trace) => {
+            const isFirstViolation =
+              firstFailingSequence !== null &&
+              trace.sequence === firstFailingSequence;
+
+            return (
               <TraceItem
                 key={trace.sequence}
                 trace={trace}
+                isFirstViolation={isFirstViolation}
+                violationReason={
+                  isFirstViolation
+                    ? violationReason
+                    : null
+                }
               />
-            )
-          )
+            );
+          })
         )}
 
         {!TERMINAL_STATUSES.includes(
