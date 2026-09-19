@@ -61,7 +61,7 @@ export interface RunResponse {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export async function startRun(
-  workflowVersion: WorkflowVersion
+  workflowVersion: WorkflowVersion,
 ): Promise<RunResponse> {
   const response = await fetch(`${API_BASE_URL}/runs`, {
     method: "POST",
@@ -78,7 +78,7 @@ export async function startRun(
 
   if (!response.ok) {
     throw new Error(
-      data.message || "Failed to start resilience test"
+      data.message || "Failed to start resilience test",
     );
   }
 
@@ -86,17 +86,41 @@ export async function startRun(
 }
 
 export async function getRun(
-  runId: string
+  runId: string,
 ): Promise<RunResponse> {
   const response = await fetch(
-    `${API_BASE_URL}/runs/${runId}`
+    `${API_BASE_URL}/runs/${runId}`,
   );
 
   const data = await response.json();
 
   if (!response.ok) {
     throw new Error(
-      data.message || "Failed to fetch run"
+      data.message || "Failed to fetch run",
+    );
+  }
+
+  return data;
+}
+
+export async function compareRun(
+  runId: string,
+): Promise<RunResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/runs/${runId}/compare`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || "Failed to start comparison run",
     );
   }
 
