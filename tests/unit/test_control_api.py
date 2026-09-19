@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime, timezone
+from botocore.exceptions import ClientError
 
 os.environ.setdefault(
     "STATE_MACHINE_ARN",
@@ -676,3 +677,319 @@ def test_api_rejects_unsupported_method():
         None,
     )
     assert response["statusCode"] == 405
+
+
+# ============================================================
+# NEW COMPARE ROUTE TESTS
+# ============================================================
+
+def test_compare_run_copies_exact_fault_plan(monkeypatch):
+    source_fault_plan = {
+        "faults": [
+            {
+                "type": "AFTER_SIDE_EFFECT_TIMEOUT",
+                "target": "ChargePayment",
+                "attempt": 1,
+            }
+        ]
+    }
+    
+    source_hash = control_api.calculate_fault_plan_hash(source_fault_plan)
+
+    class CompareStepFunctions:
+        def __init__(self):
+            self.start_calls = []
+
+        def describe_execution(self, executionArn):
+            return {
+                "executionArn": executionArn,
+                "input": json.dumps({
+                    "runId": "source_run_001",
+                    "orderId": "source_order_001",
+                    "workflowVersion": "buggy",
+                    "sku": "SKU-999",
+                    "faultPlanId": "payment-ack-lost-v1",
+                    "faultPlan": source_fault_plan
+                })
+            }
+
+        def start_execution(self, **kwargs):
+            self.start_calls.append(kwargs)
+            return {
+                "executionArn": (
+                    "arn:aws:states:us-east-1:123456789012:execution:"
+                    f"CheckoutStateMachine:{kwargs['name']}"
+                )
+            }
+
+    recorder = CompareStepFunctions()
+    monkeypatch.setattr(control_api, "stepfunctions", recorder)
+
+    generated_ids = iter(["run_cmp_001", "order_cmp_001", "evt_cmp_001"])
+    monkeypatch.setattr(control_api.uuid, "uuid4", lambda: next(generated_ids))
+
+    event = {
+        "httpMethod": "POST",
+        "resource": "/runs/{runId}/compare",
+        "pathParameters": {"runId": "source_run_001"}
+    }
+
+    response = control_api.lambda_handler(event, None)
+    
+    assert response["statusCode"] == 202
+    body = json.loads(response["body"])
+    
+    assert body["sourceRunId"] == "source_run_001"
+    assert body["runId"] == "run_cmp_001"
+    assert body["workflowVersion"] == "fixed"
+    assert body["statusUrl"] == "/runs/run_cmp_001"
+
+    # Verify the workflow input was copied correctly and forced to 'fixed'
+    assert len(recorder.start_calls) == 1
+    new_input = json.loads(recorder.start_calls[0]["input"])
+    
+    assert new_input["runId"] == "run_cmp_001"
+    assert new_input["orderId"] == "order_cmp_001"
+    assert new_input["workflowVersion"] == "fixed"
+    assert new_input["sku"] == "SKU-999"
+    assert new_input["faultPlanId"] == "payment-ack-lost-v1"
+    
+    # Assert the fault plan was copied exactly and the hash matches
+    new_hash = control_api.calculate_fault_plan_hash(new_input["faultPlan"])
+    assert new_hash == source_hash
+
+
+def test_compare_run_rejects_missing_run_id():
+    event = {
+        "httpMethod": "POST",
+        "resource": "/runs/{runId}/compare",
+        "pathParameters": {}
+    }
+    response = control_api.lambda_handler(event, None)
+    
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert body["message"] == "runId is required to compare"
+
+
+def test_compare_run_returns_404_for_missing_source(monkeypatch):
+    class NotFoundStepFunctions:
+        def describe_execution(self, executionArn):
+            error_response = {"Error": {"Code": "ExecutionDoesNotExist"}}
+            raise ClientError(error_response, "DescribeExecution")
+
+    monkeypatch.setattr(control_api, "stepfunctions", NotFoundStepFunctions())
+
+    event = {
+        "httpMethod": "POST",
+        "resource": "/runs/{runId}/compare",
+        "pathParameters": {"runId": "missing_run_123"}
+    }
+
+    response = control_api.lambda_handler(event, None)
+    
+    assert response["statusCode"] == 404
+    body = json.loads(response["body"])
+    assert body["message"] == "Source run not found"
+
+
+def test_compare_run_is_idempotent_for_same_client_token(
+    monkeypatch,
+):
+    source_fault_plan = {
+        "faults": [
+            {
+                "type":
+                    "AFTER_SIDE_EFFECT_TIMEOUT",
+                "target":
+                    "ChargePayment",
+                "attempt": 1,
+            }
+        ]
+    }
+
+    source_hash = (
+        control_api.calculate_fault_plan_hash(
+            source_fault_plan
+        )
+    )
+
+    source_input = {
+        "runId": "source_run_001",
+        "orderId": "source_order_001",
+        "eventId": "source_event_001",
+        "workflowVersion": "buggy",
+        "faultPlanId":
+            "payment-ack-lost-v1",
+        "faultPlan":
+            source_fault_plan,
+        "faultPlanHash":
+            source_hash,
+        "sku": "SKU-001",
+    }
+
+    class IdempotentStepFunctions:
+        def __init__(self):
+            self.start_calls = []
+
+        def describe_execution(
+            self,
+            executionArn,
+        ):
+            # Reading the original Buggy run.
+            if executionArn.endswith(
+                "source_run_001"
+            ):
+                return {
+                    "executionArn":
+                        executionArn,
+                    "status":
+                        "SUCCEEDED",
+                    "input":
+                        json.dumps(
+                            source_input
+                        ),
+                }
+
+            # Reading the comparison execution
+            # after ExecutionAlreadyExists.
+            return {
+                "executionArn":
+                    executionArn,
+                "status":
+                    "SUCCEEDED",
+                "input":
+                    "{}",
+            }
+
+        def start_execution(
+            self,
+            **kwargs,
+        ):
+            self.start_calls.append(
+                kwargs
+            )
+
+            if len(self.start_calls) == 1:
+                return {
+                    "executionArn": (
+                        "arn:aws:states:"
+                        "us-east-1:"
+                        "123456789012:"
+                        "execution:"
+                        "CheckoutStateMachine:"
+                        f"{kwargs['name']}"
+                    )
+                }
+
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code":
+                            "ExecutionAlreadyExists",
+                        "Message":
+                            "Execution already exists",
+                    }
+                },
+                "StartExecution",
+            )
+
+    fake_sf = IdempotentStepFunctions()
+
+    monkeypatch.setattr(
+        control_api,
+        "stepfunctions",
+        fake_sf,
+    )
+
+    monkeypatch.setattr(
+        control_api,
+        "get_execution_arn",
+        lambda run_id: (
+            "arn:aws:states:"
+            "us-east-1:"
+            "123456789012:"
+            "execution:"
+            "CheckoutStateMachine:"
+            f"{run_id}"
+        ),
+    )
+
+    event = {
+        "httpMethod": "POST",
+        "resource":
+            "/runs/{runId}/compare",
+        "pathParameters": {
+            "runId":
+                "source_run_001",
+        },
+        "body": json.dumps(
+            {
+                "clientRequestToken":
+                    "same-token-001",
+            }
+        ),
+    }
+
+    first_response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
+
+    second_response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
+
+    assert first_response["statusCode"] == 202
+    assert second_response["statusCode"] == 202
+
+    first_body = json.loads(
+        first_response["body"]
+    )
+
+    second_body = json.loads(
+        second_response["body"]
+    )
+
+    # Same source run + same token must
+    # identify the same comparison run.
+    assert (
+        first_body["runId"]
+        == second_body["runId"]
+    )
+
+    assert (
+        first_body["orderId"]
+        == second_body["orderId"]
+    )
+
+    assert (
+        first_body["eventId"]
+        == second_body["eventId"]
+    )
+
+    assert (
+        first_body["faultPlanHash"]
+        == second_body["faultPlanHash"]
+        == source_hash
+    )
+
+    assert (
+        first_body["workflowVersion"]
+        == second_body["workflowVersion"]
+        == "fixed"
+    )
+
+    # Both attempts used the same Step
+    # Functions execution name.
+    assert len(fake_sf.start_calls) == 2
+
+    assert (
+        fake_sf.start_calls[0]["name"]
+        == fake_sf.start_calls[1]["name"]
+    )
