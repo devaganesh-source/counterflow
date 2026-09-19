@@ -24,6 +24,7 @@ function ResultPage() {
   const [run, setRun] = useState<RunResponse | null>(
     locationState?.run ?? null,
   );
+
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -67,8 +68,14 @@ function ResultPage() {
   const orderedChargeIds = useMemo(
     () =>
       importantTraces
-        .filter((trace) => trace.operation === "PaymentCharged")
-        .map((trace) => trace.evidence?.chargeId)
+        .filter(
+          (trace) =>
+            trace.operation === "PaymentCharged",
+        )
+        .map(
+          (trace) =>
+            trace.evidence?.chargeId,
+        )
         .filter(
           (chargeId): chargeId is string =>
             typeof chargeId === "string",
@@ -88,10 +95,21 @@ function ResultPage() {
 
   if (error) {
     return (
-      <main style={{ padding: "40px", fontFamily: "Arial" }}>
+      <main
+        style={{
+          padding: "40px",
+          fontFamily: "Arial",
+        }}
+      >
         <h1>CounterFlow</h1>
-        <p style={{ color: "#b91c1c" }}>{error}</p>
-        <button onClick={() => navigate("/")}>
+
+        <p style={{ color: "#b91c1c" }}>
+          {error}
+        </p>
+
+        <button
+          onClick={() => navigate("/")}
+        >
           Back to launcher
         </button>
       </main>
@@ -100,7 +118,12 @@ function ResultPage() {
 
   if (!run) {
     return (
-      <main style={{ padding: "40px", fontFamily: "Arial" }}>
+      <main
+        style={{
+          padding: "40px",
+          fontFamily: "Arial",
+        }}
+      >
         <h1>CounterFlow</h1>
         <p>Loading result...</p>
       </main>
@@ -135,7 +158,10 @@ function ResultPage() {
           >
             COUNTERFLOW
           </div>
-          <h1 style={{ marginBottom: "6px" }}>Result</h1>
+
+          <h1 style={{ marginBottom: "6px" }}>
+            Result
+          </h1>
         </div>
 
         <strong
@@ -154,18 +180,33 @@ function ResultPage() {
         </strong>
       </div>
 
-      <p><strong>Run ID:</strong> {run.runId}</p>
+      <p>
+        <strong>Run ID:</strong>{" "}
+        {run.runId}
+      </p>
 
       {workflowVersion && (
-        <p><strong>Workflow Version:</strong> {workflowVersion}</p>
+        <p>
+          <strong>
+            Workflow Version:
+          </strong>{" "}
+          {workflowVersion}
+        </p>
       )}
 
-      <p><strong>Fault Profile:</strong> Payment acknowledgement lost</p>
+      <p>
+        <strong>
+          Fault Profile:
+        </strong>{" "}
+        Payment acknowledgement lost
+      </p>
 
       <hr />
 
       {run.faultPlan && (
-        <FaultPlanCard faultPlan={run.faultPlan} />
+        <FaultPlanCard
+          faultPlan={run.faultPlan}
+        />
       )}
 
       {run.invariant && (
@@ -191,7 +232,9 @@ function ResultPage() {
               trace={trace}
               isFirstViolation={isFirstViolation}
               violationReason={
-                isFirstViolation ? violationReason : null
+                isFirstViolation
+                  ? violationReason
+                  : null
               }
             />
           );
@@ -201,15 +244,69 @@ function ResultPage() {
       {run.startDate && (
         <p>
           <strong>Started:</strong>{" "}
-          {new Date(run.startDate).toLocaleString()}
+          {new Date(
+            run.startDate,
+          ).toLocaleString()}
         </p>
       )}
 
       {run.stopDate && (
         <p>
           <strong>Finished:</strong>{" "}
-          {new Date(run.stopDate).toLocaleString()}
+          {new Date(
+            run.stopDate,
+          ).toLocaleString()}
         </p>
+      )}
+
+      {workflowVersion === "buggy" && (
+        <div
+          style={{
+            marginTop: "32px",
+            padding: "24px",
+            borderRadius: "14px",
+            border: "1px solid #cbd5e1",
+            background: "#f8fafc",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>
+            Compare with Fixed
+          </h2>
+
+          <p
+            style={{
+              color: "#475569",
+            }}
+          >
+            Run the exact same stored fault
+            against the fixed workflow and
+            compare the results side by side.
+          </p>
+
+          <button
+            disabled
+            title="Waiting for compare backend endpoint"
+            style={{
+              padding: "12px 20px",
+              marginTop: "8px",
+              cursor: "not-allowed",
+              opacity: 0.65,
+              fontWeight: 700,
+            }}
+          >
+            Run same fault against fixed version
+          </button>
+
+          <p
+            style={{
+              marginBottom: 0,
+              fontSize: "13px",
+              color: "#64748b",
+            }}
+          >
+            Comparison backend is not deployed yet.
+          </p>
+        </div>
       )}
 
       <button
