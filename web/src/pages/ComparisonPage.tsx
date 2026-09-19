@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import type { RunResponse } from "../api/runs";
 import ComparisonCard from "../components/ComparisonCard";
+import TraceComparison from "../components/TraceComparison";
 
 interface ComparisonPageState {
   buggyRun?: RunResponse;
@@ -75,7 +76,7 @@ function ComparisonPage() {
       style={{
         padding: "40px",
         fontFamily: "Arial",
-        maxWidth: "1000px",
+        maxWidth: "1100px",
         margin: "auto",
       }}
     >
@@ -128,6 +129,11 @@ function ComparisonPage() {
       </section>
 
       <ComparisonCard
+        buggyRun={buggyRun}
+        fixedRun={fixedRun}
+      />
+
+      <TraceComparison
         buggyRun={buggyRun}
         fixedRun={fixedRun}
       />

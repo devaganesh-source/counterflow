@@ -7,6 +7,7 @@ import {
 } from "../api/runs";
 import FaultPlanCard from "../components/FaultPlanCard";
 import InvariantResultCard from "../components/InvariantResultCard";
+import FirstFailingPrefix from "../components/FirstFailingPrefix";
 import TraceItem from "../components/TraceItem";
 
 function ResultPage() {
@@ -107,7 +108,9 @@ function ResultPage() {
           {error}
         </p>
 
-        <button onClick={() => navigate("/")}>
+        <button
+          onClick={() => navigate("/")}
+        >
           Back to launcher
         </button>
       </main>
@@ -212,6 +215,14 @@ function ResultPage() {
           invariant={run.invariant}
           orderedChargeIds={orderedChargeIds}
           traces={run.traces ?? []}
+        />
+      )}
+
+      {firstFailingSequence !== null && (
+        <FirstFailingPrefix
+          traces={run.traces ?? []}
+          firstFailingSequence={firstFailingSequence}
+          violationReason={violationReason}
         />
       )}
 
