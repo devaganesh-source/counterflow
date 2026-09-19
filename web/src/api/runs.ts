@@ -36,10 +36,10 @@ export interface FaultPlanInfo {
 }
 
 export interface TraceAnalysis {
-  firstFailingSequence: number;
-  firstFailingOperation?: string;
-  firstFailingComponent?: string;
-  reason?: string;
+  firstFailingSequence: number | null;
+  firstFailingOperation: string | null;
+  firstFailingComponent: string | null;
+  reason: string | null;
 }
 
 export interface RunResponse {
