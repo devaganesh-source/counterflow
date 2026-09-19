@@ -56,6 +56,15 @@ def get_execution_arn(run_id):
     )
 
 
+def calculate_fault_plan_hash(fault_plan):
+    canonical_plan = json.dumps(
+        fault_plan,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical_plan.encode("utf-8")).hexdigest()
+
+
 def start_run(event):
     raw_body = event.get("body") or "{}"
 
@@ -101,21 +110,34 @@ def start_run(event):
     # the fault plan understood by ChargePayment.
     fault_plan_id = body.get("faultPlanId")
 
-    if fault_plan_id == "payment-ack-lost-v1":
-        workflow_input["faultPlan"] = {
-            "faults": [
+    # PRD Hardening: Allowlisted enums and validation
+    if fault_plan_id:
+        if fault_plan_id == "payment-ack-lost-v1":
+            fault_plan = {
+                "faults": [
+                    {
+                        "type":
+                            "AFTER_SIDE_EFFECT_TIMEOUT",
+                        "target":
+                            "ChargePayment",
+                        "attempt": 1,
+                    }
+                ]
+            }
+            workflow_input["faultPlanId"] = fault_plan_id
+            workflow_input["faultPlan"] = fault_plan
+            
+            # Preserve the resolved fault snapshot/hash
+            workflow_input["faultPlanHash"] = calculate_fault_plan_hash(fault_plan)
+        else:
+            return api_response(
+                400,
                 {
-                    "type":
-                        "AFTER_SIDE_EFFECT_TIMEOUT",
-                    "target":
-                        "ChargePayment",
-                    "attempt": 1,
-                }
-            ]
-        }
+                    "message": f"Invalid faultPlanId '{fault_plan_id}'. Must be a known allowlisted enum."
+                },
+            )
     else:
-        # Allows custom fault plans for testing,
-        # including Catch-path testing.
+        # Allows default empty plans for standard execution
         workflow_input.setdefault(
             "faultPlan",
             {},
@@ -302,15 +324,6 @@ def run_invariant_checker(
     )
 
 
-def calculate_fault_plan_hash(fault_plan):
-    canonical_plan = json.dumps(
-        fault_plan,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(canonical_plan.encode("utf-8")).hexdigest()
-
-
 def build_fault_plan_info(execution_input):
     fault_plan = execution_input.get(
         "faultPlan",
@@ -379,6 +392,49 @@ def build_trace_analysis(invariant):
         "reason":
             invariant.get("reason"),
     }
+
+
+def get_trace(event):
+    path_parameters = (
+        event.get("pathParameters") or {}
+    )
+
+    run_id = path_parameters.get("runId")
+
+    if not run_id:
+        return api_response(
+            400,
+            {
+                "message":
+                    "runId is required"
+            },
+        )
+
+    table = dynamodb.Table(TABLE_NAME)
+
+    trace_result = table.query(
+        KeyConditionExpression=(
+            Key("PK").eq(
+                f"RUN#{run_id}"
+            )
+            & Key("SK").begins_with(
+                "TRACE#"
+            )
+        )
+    )
+
+    traces = trace_result.get(
+        "Items",
+        [],
+    )
+
+    return api_response(
+        200,
+        {
+            "runId": run_id,
+            "traces": traces
+        },
+    )
 
 
 def get_run(event):
@@ -545,6 +601,9 @@ def lambda_handler(event, context):
             return start_run(event)
 
         if method == "GET":
+            # Support the newly added trace endpoint
+            if resource.endswith("/trace") or path.endswith("/trace"):
+                return get_trace(event)
             return get_run(event)
 
         return api_response(

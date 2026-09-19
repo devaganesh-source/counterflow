@@ -572,7 +572,8 @@ def run_post_contract_test(
         == "payment-ack-lost-v1"
     )
     assert workflow_input["sku"] == "SKU-001"
-    assert workflow_input["faultPlan"] == {
+    
+    expected_fault_plan = {
         "faults": [
             {
                 "type": "AFTER_SIDE_EFFECT_TIMEOUT",
@@ -581,6 +582,13 @@ def run_post_contract_test(
             }
         ]
     }
+    assert workflow_input["faultPlan"] == expected_fault_plan
+    assert (
+        workflow_input["faultPlanHash"]
+        == control_api.calculate_fault_plan_hash(
+            expected_fault_plan
+        )
+    )
 
 
 def test_post_runs_starts_buggy_workflow(monkeypatch):
