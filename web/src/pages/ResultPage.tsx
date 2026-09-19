@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
+  compareRun,
   getRun,
   type RunResponse,
   type WorkflowVersion,
@@ -29,6 +30,12 @@ function ResultPage() {
   );
 
   const [error, setError] = useState("");
+
+  const [compareLoading, setCompareLoading] =
+    useState(false);
+
+  const [compareError, setCompareError] =
+    useState("");
 
   useEffect(() => {
     if (!runId || run) return;
@@ -91,6 +98,95 @@ function ResultPage() {
 
   const violationReason =
     run?.traceAnalysis?.reason ?? null;
+
+  async function handleCompare() {
+    if (!runId || !run) return;
+
+    try {
+      setCompareLoading(true);
+      setCompareError("");
+
+      const tokenKey =
+        `counterflow:compareToken:${runId}`;
+
+      let clientRequestToken =
+        sessionStorage.getItem(tokenKey);
+
+      if (!clientRequestToken) {
+        clientRequestToken =
+          crypto.randomUUID();
+
+        sessionStorage.setItem(
+          tokenKey,
+          clientRequestToken,
+        );
+      }
+
+      const comparison = await compareRun(
+        runId,
+        clientRequestToken,
+      );
+
+      const fixedRunId =
+        comparison.runId;
+
+      let fixedRun =
+        await getRun(fixedRunId);
+
+      const terminalStatuses = [
+        "SUCCEEDED",
+        "FAILED",
+        "TIMED_OUT",
+        "ABORTED",
+      ];
+
+      let attempts = 0;
+
+      while (
+        !terminalStatuses.includes(
+          fixedRun.status,
+        ) &&
+        attempts < 60
+      ) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2000),
+        );
+
+        fixedRun =
+          await getRun(fixedRunId);
+
+        attempts += 1;
+      }
+
+      if (
+        !terminalStatuses.includes(
+          fixedRun.status,
+        )
+      ) {
+        throw new Error(
+          "Comparison run is still running. Please try again shortly.",
+        );
+      }
+
+      navigate(
+        `/run/${runId}/compare`,
+        {
+          state: {
+            buggyRun: run,
+            fixedRun,
+          },
+        },
+      );
+    } catch (err) {
+      setCompareError(
+        err instanceof Error
+          ? err.message
+          : "Failed to run fixed comparison.",
+      );
+    } finally {
+      setCompareLoading(false);
+    }
+  }
 
   if (!runId) {
     return <p>Missing run ID.</p>;
@@ -436,28 +532,50 @@ function ResultPage() {
           </p>
 
           <button
-            disabled
-            title="Waiting for compare backend endpoint"
+            onClick={handleCompare}
+            disabled={compareLoading}
             style={{
               padding: "12px 20px",
               marginTop: "8px",
-              cursor: "not-allowed",
-              opacity: 0.65,
+              cursor: compareLoading
+                ? "not-allowed"
+                : "pointer",
+              opacity: compareLoading
+                ? 0.65
+                : 1,
               fontWeight: 700,
             }}
           >
-            Run same fault against fixed version
+            {compareLoading
+              ? "Running fixed comparison..."
+              : "Run same fault against fixed version"}
           </button>
 
-          <p
-            style={{
-              marginBottom: 0,
-              fontSize: "13px",
-              color: "#64748b",
-            }}
-          >
-            Comparison backend is not deployed yet.
-          </p>
+          {compareError ? (
+            <p
+              style={{
+                marginBottom: 0,
+                marginTop: "14px",
+                color: "#b91c1c",
+                fontWeight: 700,
+              }}
+            >
+              ✕ {compareError}
+            </p>
+          ) : (
+            <p
+              style={{
+                marginBottom: 0,
+                marginTop: "14px",
+                fontSize: "13px",
+                color: "#64748b",
+              }}
+            >
+              The fixed workflow will reuse the exact
+              stored fault snapshot and hash from this
+              Buggy run.
+            </p>
+          )}
         </div>
       )}
 

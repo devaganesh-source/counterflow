@@ -58,6 +58,18 @@ export interface RunResponse {
   traceAnalysis?: TraceAnalysis | null;
 }
 
+export interface CompareRunResponse {
+  sourceRunId: string;
+  runId: string;
+  orderId: string;
+  eventId: string;
+  workflowVersion: "fixed";
+  executionArn: string;
+  status: string;
+  statusUrl: string;
+  faultPlanHash: string;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export class ApiError extends Error {
@@ -146,14 +158,18 @@ export async function getRun(
 
 export async function compareRun(
   runId: string,
-): Promise<RunResponse> {
-  return requestJson<RunResponse>(
+  clientRequestToken: string,
+): Promise<CompareRunResponse> {
+  return requestJson<CompareRunResponse>(
     `${API_BASE_URL}/runs/${runId}/compare`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        clientRequestToken,
+      }),
     },
   );
 }
