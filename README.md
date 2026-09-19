@@ -4,7 +4,7 @@
 
 CounterFlow is an AWS-native correctness-testing tool for event-driven and serverless workflows.
 
-It injects reproducible failures into a simulated checkout workflow, records the resulting execution trace, evaluates business invariants deterministically, identifies the first failing trace prefix, and reruns the exact same fault against a fixed implementation.
+It injects reproducible failures into a simulated checkout workflow, records the resulting execution trace, evaluates business invariants deterministically, identifies the first failing trace prefix, and reruns the exact same stored fault against a fixed implementation.
 
 The primary demonstration exposes a classic distributed-systems failure:
 
@@ -13,6 +13,21 @@ The primary demonstration exposes a classic distributed-systems failure:
 > Without idempotency, the customer is charged twice.
 
 CounterFlow makes that failure visible, reproducible, measurable, and comparable against the fix.
+
+---
+
+## Live deployment
+
+**Frontend:**  
+http://counterflow-demo-web-618042349623.s3-website-us-east-1.amazonaws.com
+
+**API:**  
+https://1wmhwskvlk.execute-api.us-east-1.amazonaws.com/dev/
+
+**AWS stack:** `counterflow-demo`  
+**Region:** `us-east-1`
+
+The previous workshop deployment was intentionally left untouched while the permanent deployment was verified.
 
 ---
 
@@ -114,16 +129,15 @@ The invariant checker is deterministic application code. An LLM does **not** dec
 
 The following diagram shows how CounterFlow launches resilience experiments, orchestrates the checkout workflow, records evidence, evaluates invariants, and compares Buggy and Fixed implementations.
 
-![CounterFlow AWS Architecture](docs/counterflow-architecture.png)
+![CounterFlow AWS Architecture](./docs/counterflow-architecture.png)
 
 ### Execution flow
 
 1. The React + Vite frontend starts a resilience test through Amazon API Gateway.
 2. The Control API validates the request, checks the demo token, and resolves an allowlisted fault plan.
 3. AWS Step Functions orchestrates the checkout workflow and retry behavior.
-4. Lambda functions execute the business workflow:
-   `CreateOrder → ReserveInventory → ChargePayment → ConfirmOrder`.
-5. DynamoDB stores business state, trace evidence, fault-plan snapshots, and invariant-related data.
+4. Lambda functions execute the business workflow: `CreateOrder → ReserveInventory → ChargePayment → ConfirmOrder`.
+5. DynamoDB stores business state, trace evidence, immutable fault-plan snapshots, and invariant-related data.
 6. The deterministic Invariant Checker evaluates `ChargeAtMostOnce` and identifies the first failing prefix.
 7. The Control API returns the evidence to the frontend and can rerun the exact same stored fault against the Fixed implementation.
 
@@ -187,7 +201,7 @@ Step Functions retries ChargePayment
 
 The original run stores the full resolved fault-plan snapshot and its canonical SHA-256 hash.
 
-The Fixed comparison run reuses the same stored snapshot and hash rather than resolving the named profile again.
+The Fixed comparison run reuses the exact same stored snapshot and hash rather than resolving the named profile again.
 
 This ensures that the comparison changes the **implementation**, not the **experiment**.
 
@@ -326,8 +340,6 @@ X-Demo-Token: <demo-token>
 
 The Control API validates the workflow version and fault-plan ID before starting execution.
 
----
-
 ### Get a run
 
 ```http
@@ -343,8 +355,6 @@ Returns information including:
 - first-failing-prefix analysis
 - business-impact data
 
----
-
 ### Get the trace
 
 ```http
@@ -352,8 +362,6 @@ GET /runs/{runId}/trace
 ```
 
 Returns the ordered evidence trace for the run.
-
----
 
 ### Compare against Fixed
 
@@ -376,7 +384,7 @@ The comparison:
 - runs the Fixed implementation,
 - uses the client request token for idempotency.
 
-Repeated compare requests using the same source run and client request token resolve to the same comparison run.
+Repeated compare requests using the same source run and client request token return the same comparison run.
 
 ---
 
@@ -432,13 +440,13 @@ CounterFlow uses the following AWS services.
 
 | AWS service | Purpose |
 |---|---|
-| Amazon API Gateway | Public REST API for starting, reading, tracing, and comparing runs |
+| Amazon API Gateway | REST API for starting, reading, tracing, and comparing runs |
 | AWS Lambda | Control API and checkout business handlers |
 | AWS Step Functions | Checkout orchestration and retry behavior |
 | Amazon DynamoDB | Simulated business state, execution evidence, and immutable fault-plan data |
 | Amazon CloudWatch | Lambda logs and operational visibility |
 | AWS CloudFormation / AWS SAM | Infrastructure as code and deployment |
-| AWS Amplify Hosting | Target hosting for the React/Vite frontend |
+| Amazon S3 static website hosting | Permanent React/Vite frontend hosting |
 
 Infrastructure is defined in:
 
@@ -466,10 +474,12 @@ The deployment includes:
 - 7-day Lambda CloudWatch log retention
 - read-only DynamoDB access for the invariant checker
 - scoped IAM permissions
-- CORS configuration
+- CORS configuration including `X-Demo-Token`
 - no AWS credentials stored in the frontend
 
 The frontend keeps the demo access token only in browser `sessionStorage`.
+
+The demo token was rotated after acceptance testing and is **not** stored in GitHub or `samconfig`.
 
 The demo token is not intended to replace a production identity system; it is a lightweight protection mechanism for the hackathon deployment.
 
@@ -477,7 +487,7 @@ The demo token is not intended to replace a production identity system; it is a 
 
 ## Testing
 
-The project currently contains:
+The project contains:
 
 ```text
 29 automated tests
@@ -496,6 +506,7 @@ Coverage includes:
 - Fixed `PaymentReused` behavior
 - POST `/runs` contracts
 - GET run contracts
+- trace endpoint behavior
 - compare-run contracts
 - fault-plan snapshot/hash preservation
 - compare idempotency
@@ -535,13 +546,15 @@ npm install
 npm run build
 ```
 
-Current verified local release-candidate status:
+Current verified release status:
 
 ```text
 29/29 tests passing
 SAM template valid
 SAM build successful
 Frontend production build successful
+Permanent AWS deployment verified
+Browser Buggy → Fixed comparison verified
 ```
 
 ---
@@ -626,26 +639,91 @@ VITE_API_BASE_URL=<ApiUrl>
 
 Then rebuild and deploy the frontend.
 
+The permanent demo frontend is hosted as an Amazon S3 static website.
+
 ---
 
-## Evaluation
+## Permanent deployment acceptance results
 
-Permanent-deployment results will be added after the final acceptance test.
+Permanent deployment acceptance testing completed successfully.
 
-| Scenario | Expected | Final measured result |
+**Stack**
+
+```text
+counterflow-demo
+```
+
+**Region**
+
+```text
+us-east-1
+```
+
+### Verified routes
+
+```text
+POST /runs
+GET  /runs/{runId}
+GET  /runs/{runId}/trace
+POST /runs/{runId}/compare
+```
+
+### Acceptance matrix
+
+| Scenario | Expected | Measured result |
 |---|---|---|
-| Buggy / no injected fault | 1 committed charge, PASS | Pending permanent deployment |
-| Buggy / `payment-ack-lost-v1` | 2 committed charges, FAIL | Pending permanent deployment |
-| Fixed / no injected fault | 1 committed charge, PASS | Pending permanent deployment |
-| Fixed / same stored fault | 1 committed charge, PASS | Pending permanent deployment |
-| Fault-plan hash | identical between Buggy and Fixed comparison | Pending permanent deployment |
-| Repeated compare token | same comparison run | Pending permanent deployment |
-| Unauthorized mutation request | HTTP 401 | Pending permanent deployment |
-| Trace endpoint | ordered trace returned | Pending permanent deployment |
+| Unauthorized mutation request | HTTP 401 | ✅ HTTP 401 |
+| Buggy / payment ACK lost | 2 committed charges, FAIL | ✅ 2 charges, FAILED |
+| Buggy business impact | ₹999 overcharge | ✅ ₹999 overcharge |
+| Trace endpoint | ordered trace + first violation | ✅ Verified |
+| Fixed / same stored fault | 1 committed charge, PASS | ✅ 1 charge, PASSED |
+| Fixed retry behavior | `PaymentReused` | ✅ Verified |
+| Fixed business impact | ₹0 overcharge | ✅ ₹0 overcharge |
+| Fault-plan comparison | identical stored fault hash | ✅ Verified |
+| Repeated compare token | same comparison run | ✅ Verified |
+| Browser Buggy → Fixed flow | completes end-to-end | ✅ Verified |
 
-Before recording the final demo, the full flow will be repeated multiple times and the measured results will be recorded here.
+### Acceptance evidence
 
-No reliability percentage or reproduction claim will be published until it is measured on the final deployment.
+**Browser Buggy run**
+
+```text
+f15f0dc3-7ba3-4e4d-a8d6-d691a2306604
+```
+
+**Backend Buggy run**
+
+```text
+3c497ed7-9051-4a5e-a6f0-3eb1e8fa9021
+```
+
+**Fixed comparison run**
+
+```text
+d8502309-4ad2-52ad-89f9-57bdb16007f1
+```
+
+**Shared fault SHA-256**
+
+```text
+cc60363731e5ec0d7754ea6504579a6154639736830674be41f17249a3ea5329
+```
+
+The same stored fault snapshot/hash was reused for the Fixed comparison.
+
+Repeating the same compare request token returned the same comparison run ID.
+
+---
+
+## Deployment acceptance fixes
+
+Final browser acceptance testing exposed three deployment-specific issues that were corrected:
+
+1. API Gateway CORS needed `X-Demo-Token` in `AllowHeaders`.
+2. Frontend polling for `GET /runs/{runId}` needed to send the demo-token header.
+3. S3 static HTTP hosting did not reliably expose `crypto.randomUUID()`, so compare-token generation uses a compatibility fallback.
+
+These fixes were validated with the complete browser Buggy → Fixed comparison flow.
 
 ---
 
@@ -681,6 +759,7 @@ Current limitations include:
 - no automatic discovery of arbitrary business invariants
 - no Bedrock dependency in the correctness path
 - demo-token protection rather than a full production authentication system
+- current S3 static website frontend uses HTTP
 
 A passing result means:
 
@@ -739,6 +818,7 @@ Primary responsibilities:
 - invariant/result visualization
 - forensic visual system
 - demo interaction flow
+- permanent deployment
 - deployment verification
 - final UI polish
 
@@ -792,31 +872,39 @@ counterflow/
 
 CounterFlow is built to support one precise claim:
 
-> We injected a reproducible failure after a simulated payment side effect. The Buggy workflow retried and produced two committed charges. CounterFlow's deterministic invariant checker identified the first failing trace prefix. After adding an idempotent conditional write, the same stored fault plan produced one committed charge and passed the invariant.
+> We injected a reproducible failure after a simulated payment side effect. The Buggy workflow retried and produced two committed charges. CounterFlow's deterministic invariant checker identified the first failing trace prefix. After adding an idempotent conditional write, the exact same stored fault plan produced one committed charge and passed the invariant.
 
 ---
 
 ## Links
 
-**Live demo:** `TODO_AFTER_PERMANENT_DEPLOYMENT`
+**Live demo:**  
+http://counterflow-demo-web-618042349623.s3-website-us-east-1.amazonaws.com
 
-**Demo video:** `TODO_AFTER_RECORDING`
+**API:**  
+https://1wmhwskvlk.execute-api.us-east-1.amazonaws.com/dev/
 
-**Repository:** https://github.com/devaganesh-source/counterflow
+**Repository:**  
+https://github.com/devaganesh-source/counterflow
+
+**Demo video:**  
+`TODO_AFTER_RECORDING`
 
 ---
 
 ## Status
 
 ```text
-Core implementation:       COMPLETE
-PRD hardening:              COMPLETE
-Frontend polish:            COMPLETE
-Automated tests:            29/29 PASS
-SAM validation:             PASS
-SAM build:                  PASS
-Frontend production build:  PASS
-Permanent deployment:       IN PROGRESS
-Final acceptance results:   PENDING
-Demo recording:             PENDING
+Core implementation:         COMPLETE
+PRD hardening:                COMPLETE
+Frontend polish:              COMPLETE
+Automated tests:              29/29 PASS
+SAM validation:               PASS
+SAM build:                    PASS
+Frontend production build:    PASS
+Permanent deployment:         COMPLETE
+Acceptance testing:           PASS
+Browser Buggy → Fixed flow:   PASS
+README / architecture:        COMPLETE
+Demo recording:               PENDING
 ```
