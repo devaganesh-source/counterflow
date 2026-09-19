@@ -220,6 +220,13 @@ Resources:
             Path: /runs/{runId}/compare
             Method: POST
 
+        GetRunTrace:
+          Type: Api
+          Properties:
+             RestApiId: !Ref CounterFlowApi
+             Path: /runs/{runId}/trace
+             Method: GET
+
 
 # ==============================================================
 # Outputs

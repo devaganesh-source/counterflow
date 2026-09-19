@@ -43,11 +43,9 @@ def api_response(status_code, body):
 
 
 def get_execution_arn(run_id):
-    prefix, state_machine_name = (
-        STATE_MACHINE_ARN.rsplit(
-            ":stateMachine:",
-            1,
-        )
+    prefix, state_machine_name = STATE_MACHINE_ARN.rsplit(
+        ":stateMachine:",
+        1,
     )
 
     return (
@@ -75,8 +73,7 @@ def start_run(event):
             return api_response(
                 400,
                 {
-                    "message":
-                        "Request body must be valid JSON"
+                    "message": "Request body must be valid JSON"
                 },
             )
     else:
@@ -106,42 +103,32 @@ def start_run(event):
         "SKU-001",
     )
 
-    # Translate the UI fault profile into
-    # the fault plan understood by ChargePayment.
+    # Enforce strict allowlisted faultPlanId validation
     fault_plan_id = body.get("faultPlanId")
 
-    # PRD Hardening: Allowlisted enums and validation
-    if fault_plan_id:
-        if fault_plan_id == "payment-ack-lost-v1":
-            fault_plan = {
-                "faults": [
-                    {
-                        "type":
-                            "AFTER_SIDE_EFFECT_TIMEOUT",
-                        "target":
-                            "ChargePayment",
-                        "attempt": 1,
-                    }
-                ]
-            }
-            workflow_input["faultPlanId"] = fault_plan_id
-            workflow_input["faultPlan"] = fault_plan
-            
-            # Preserve the resolved fault snapshot/hash
-            workflow_input["faultPlanHash"] = calculate_fault_plan_hash(fault_plan)
-        else:
-            return api_response(
-                400,
-                {
-                    "message": f"Invalid faultPlanId '{fault_plan_id}'. Must be a known allowlisted enum."
-                },
-            )
-    else:
-        # Allows default empty plans for standard execution
-        workflow_input.setdefault(
-            "faultPlan",
-            {},
+    if fault_plan_id != "payment-ack-lost-v1":
+        return api_response(
+            400,
+            {
+                "message": (
+                    f"Invalid faultPlanId '{fault_plan_id}'. Must be a known allowlisted enum."
+                )
+            },
         )
+
+    fault_plan = {
+        "faults": [
+            {
+                "type": "AFTER_SIDE_EFFECT_TIMEOUT",
+                "target": "ChargePayment",
+                "attempt": 1,
+            }
+        ]
+    }
+
+    workflow_input["faultPlanId"] = fault_plan_id
+    workflow_input["faultPlan"] = fault_plan
+    workflow_input["faultPlanHash"] = calculate_fault_plan_hash(fault_plan)
 
     execution = stepfunctions.start_execution(
         stateMachineArn=STATE_MACHINE_ARN,
@@ -155,19 +142,15 @@ def start_run(event):
             "runId": run_id,
             "orderId": order_id,
             "eventId": event_id,
-            "executionArn":
-                execution["executionArn"],
+            "executionArn": execution["executionArn"],
             "status": "RUNNING",
-            "statusUrl":
-                f"/runs/{run_id}",
+            "statusUrl": f"/runs/{run_id}",
         },
     )
 
 
 def compare_run(event):
-    path_parameters = (
-        event.get("pathParameters") or {}
-    )
+    path_parameters = event.get("pathParameters") or {}
 
     source_run_id = path_parameters.get("runId")
 
@@ -175,8 +158,7 @@ def compare_run(event):
         return api_response(
             400,
             {
-                "message":
-                    "runId is required to compare"
+                "message": "runId is required to compare"
             },
         )
 
@@ -199,9 +181,7 @@ def compare_run(event):
         )
 
     except ClientError as error:
-        error_code = (
-            error.response["Error"]["Code"]
-        )
+        error_code = error.response["Error"]["Code"]
 
         if error_code == "ExecutionDoesNotExist":
             return api_response(
@@ -214,9 +194,7 @@ def compare_run(event):
 
         raise
 
-    source_input = json.loads(
-        execution.get("input") or "{}"
-    )
+    source_input = json.loads(execution.get("input") or "{}")
 
     if client_token:
         # Generate deterministic UUIDs if a token is provided
@@ -242,7 +220,7 @@ def compare_run(event):
     # from the original execution to ensure parity.
     if "faultPlanId" in source_input:
         workflow_input["faultPlanId"] = source_input["faultPlanId"]
-        
+
     if "faultPlan" in source_input:
         workflow_input["faultPlan"] = source_input["faultPlan"]
 
@@ -292,8 +270,7 @@ def run_invariant_checker(
     order_id,
 ):
     checker_response = lambda_client.invoke(
-        FunctionName=
-            INVARIANT_CHECKER_FUNCTION,
+        FunctionName=INVARIANT_CHECKER_FUNCTION,
         InvocationType="RequestResponse",
         Payload=json.dumps(
             {
@@ -314,10 +291,6 @@ def run_invariant_checker(
             f"Invariant checker failed: {payload}"
         )
 
-    # Main's deterministic invariant checker
-    # preserves the result under invariantResult.
-    # The fallback keeps compatibility with the
-    # older direct-result response.
     return payload.get(
         "invariantResult",
         payload,
@@ -347,10 +320,7 @@ def build_fault_plan_info(execution_input):
         "unknown",
     )
 
-    if (
-        fault_plan_id
-        == "payment-ack-lost-v1"
-    ):
+    if fault_plan_id == "payment-ack-lost-v1":
         name = "Payment acknowledgement lost"
     else:
         name = fault_plan_id
@@ -369,35 +339,21 @@ def build_trace_analysis(invariant):
     if not invariant:
         return None
 
-    first_failing_sequence = (
-        invariant.get(
-            "firstFailingSequence"
-        )
-    )
+    first_failing_sequence = invariant.get("firstFailingSequence")
 
     if first_failing_sequence is None:
         return None
 
     return {
-        "firstFailingSequence":
-            first_failing_sequence,
-        "firstFailingOperation":
-            invariant.get(
-                "firstFailingOperation"
-            ),
-        "firstFailingComponent":
-            invariant.get(
-                "firstFailingComponent"
-            ),
-        "reason":
-            invariant.get("reason"),
+        "firstFailingSequence": first_failing_sequence,
+        "firstFailingOperation": invariant.get("firstFailingOperation"),
+        "firstFailingComponent": invariant.get("firstFailingComponent"),
+        "reason": invariant.get("reason"),
     }
 
 
 def get_trace(event):
-    path_parameters = (
-        event.get("pathParameters") or {}
-    )
+    path_parameters = event.get("pathParameters") or {}
 
     run_id = path_parameters.get("runId")
 
@@ -405,8 +361,7 @@ def get_trace(event):
         return api_response(
             400,
             {
-                "message":
-                    "runId is required"
+                "message": "runId is required"
             },
         )
 
@@ -414,12 +369,8 @@ def get_trace(event):
 
     trace_result = table.query(
         KeyConditionExpression=(
-            Key("PK").eq(
-                f"RUN#{run_id}"
-            )
-            & Key("SK").begins_with(
-                "TRACE#"
-            )
+            Key("PK").eq(f"RUN#{run_id}")
+            & Key("SK").begins_with("TRACE#")
         )
     )
 
@@ -432,15 +383,13 @@ def get_trace(event):
         200,
         {
             "runId": run_id,
-            "traces": traces
+            "traces": traces,
         },
     )
 
 
 def get_run(event):
-    path_parameters = (
-        event.get("pathParameters") or {}
-    )
+    path_parameters = event.get("pathParameters") or {}
 
     run_id = path_parameters.get("runId")
 
@@ -448,36 +397,25 @@ def get_run(event):
         return api_response(
             400,
             {
-                "message":
-                    "runId is required"
+                "message": "runId is required"
             },
         )
 
-    execution_arn = get_execution_arn(
-        run_id
-    )
+    execution_arn = get_execution_arn(run_id)
 
     try:
-        execution = (
-            stepfunctions.describe_execution(
-                executionArn=execution_arn
-            )
+        execution = stepfunctions.describe_execution(
+            executionArn=execution_arn
         )
 
     except ClientError as error:
-        error_code = (
-            error.response["Error"]["Code"]
-        )
+        error_code = error.response["Error"]["Code"]
 
-        if (
-            error_code
-            == "ExecutionDoesNotExist"
-        ):
+        if error_code == "ExecutionDoesNotExist":
             return api_response(
                 404,
                 {
-                    "message":
-                        "Run not found",
+                    "message": "Run not found",
                     "runId": run_id,
                 },
             )
@@ -488,12 +426,8 @@ def get_run(event):
 
     trace_result = table.query(
         KeyConditionExpression=(
-            Key("PK").eq(
-                f"RUN#{run_id}"
-            )
-            & Key("SK").begins_with(
-                "TRACE#"
-            )
+            Key("PK").eq(f"RUN#{run_id}")
+            & Key("SK").begins_with("TRACE#")
         )
     )
 
@@ -502,18 +436,11 @@ def get_run(event):
         [],
     )
 
-    # Read the original workflow input once.
-    # This contains the exact fault plan used.
     execution_input = json.loads(
-        execution.get("input")
-        or "{}"
+        execution.get("input") or "{}"
     )
 
-    fault_plan_info = (
-        build_fault_plan_info(
-            execution_input
-        )
-    )
+    fault_plan_info = build_fault_plan_info(execution_input)
 
     invariant = None
     trace_analysis = None
@@ -526,35 +453,21 @@ def get_run(event):
     }
 
     if execution["status"] in terminal_statuses:
-        order_id = execution_input.get(
-            "orderId"
-        )
+        order_id = execution_input.get("orderId")
 
         if order_id:
-            invariant = (
-                run_invariant_checker(
-                    run_id,
-                    order_id,
-                )
+            invariant = run_invariant_checker(
+                run_id,
+                order_id,
             )
 
-            # The backend invariant checker decides
-            # the first failing side effect.
-            # The frontend only visualizes this result.
-            trace_analysis = (
-                build_trace_analysis(
-                    invariant
-                )
-            )
+            trace_analysis = build_trace_analysis(invariant)
 
     result = {
         "runId": run_id,
         "status": execution["status"],
-        "statusUrl":
-            f"/runs/{run_id}",
-        "startDate":
-            execution["startDate"]
-            .isoformat(),
+        "statusUrl": f"/runs/{run_id}",
+        "startDate": execution["startDate"].isoformat(),
         "traces": traces,
         "invariant": invariant,
         "faultPlan": fault_plan_info,
@@ -562,22 +475,13 @@ def get_run(event):
     }
 
     if execution.get("stopDate"):
-        result["stopDate"] = (
-            execution["stopDate"]
-            .isoformat()
-        )
+        result["stopDate"] = execution["stopDate"].isoformat()
 
     if execution.get("output"):
         try:
-            result["output"] = (
-                json.loads(
-                    execution["output"]
-                )
-            )
+            result["output"] = json.loads(execution["output"])
         except json.JSONDecodeError:
-            result["output"] = (
-                execution["output"]
-            )
+            result["output"] = execution["output"]
 
     return api_response(
         200,
@@ -595,13 +499,11 @@ def lambda_handler(event, context):
         path = event.get("path", "")
 
         if method == "POST":
-            # Route to compare_run if the path/resource ends with /compare
             if resource.endswith("/compare") or path.endswith("/compare"):
                 return compare_run(event)
             return start_run(event)
 
         if method == "GET":
-            # Support the newly added trace endpoint
             if resource.endswith("/trace") or path.endswith("/trace"):
                 return get_trace(event)
             return get_run(event)
@@ -609,22 +511,17 @@ def lambda_handler(event, context):
         return api_response(
             405,
             {
-                "message":
-                    f"Method {method} not allowed"
+                "message": f"Method {method} not allowed"
             },
         )
 
     except Exception as error:
-        print(
-            f"ERROR: {str(error)}"
-        )
+        print(f"ERROR: {str(error)}")
 
         return api_response(
             500,
             {
-                "message":
-                    "Internal server error",
-                "error":
-                    str(error),
+                "message": "Internal server error",
+                "error": str(error),
             },
         )
