@@ -107,9 +107,7 @@ function ResultPage() {
           {error}
         </p>
 
-        <button
-          onClick={() => navigate("/")}
-        >
+        <button onClick={() => navigate("/")}>
           Back to launcher
         </button>
       </main>
@@ -213,6 +211,7 @@ function ResultPage() {
         <InvariantResultCard
           invariant={run.invariant}
           orderedChargeIds={orderedChargeIds}
+          traces={run.traces ?? []}
         />
       )}
 

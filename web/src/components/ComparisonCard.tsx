@@ -21,6 +21,16 @@ function countCharges(run: RunResponse) {
   ).length;
 }
 
+function shortHash(hash?: string) {
+  if (!hash) {
+    return "Unavailable";
+  }
+
+  return hash.length > 12
+    ? `${hash.slice(0, 12)}...`
+    : hash;
+}
+
 function ComparisonCard({
   buggyRun,
   fixedRun,
@@ -37,24 +47,34 @@ function ComparisonCard({
   const fixedInvariant =
     fixedRun.invariant?.status ?? "UNKNOWN";
 
-  const buggyHash =
-    buggyRun.faultPlan?.hash ?? "Unavailable";
+  const buggyFault = buggyRun.faultPlan;
+  const fixedFault = fixedRun.faultPlan;
 
-  const fixedHash =
-    fixedRun.faultPlan?.hash ?? "Unavailable";
+  const samePlanId =
+    Boolean(buggyFault?.planId) &&
+    buggyFault?.planId === fixedFault?.planId;
 
-  const sameFault =
-    buggyRun.faultPlan?.hash &&
-    fixedRun.faultPlan?.hash &&
-    buggyRun.faultPlan.hash === fixedRun.faultPlan.hash;
+  const sameHash =
+    Boolean(buggyFault?.hash) &&
+    buggyFault?.hash === fixedFault?.hash;
+
+  const sameDefinition =
+    buggyFault?.type === fixedFault?.type &&
+    buggyFault?.target === fixedFault?.target &&
+    buggyFault?.attempt === fixedFault?.attempt;
+
+  const sameFaultSnapshot =
+    samePlanId &&
+    sameHash &&
+    sameDefinition;
 
   return (
     <section
       style={{
         marginTop: "32px",
         padding: "28px",
-        border: "1px solid #cbd5e1",
         borderRadius: "14px",
+        border: "1px solid #cbd5e1",
         background: "#ffffff",
       }}
     >
@@ -62,41 +82,115 @@ function ComparisonCard({
         Buggy vs Fixed
       </h2>
 
-      <p>
-        Same stored fault snapshot:{" "}
-        <strong>
-          {sameFault ? "YES" : "NO"}
-        </strong>
+      <p
+        style={{
+          color: "#64748b",
+          marginBottom: "24px",
+        }}
+      >
+        Both workflow versions are compared under the
+        same stored failure schedule.
       </p>
+
+      <section
+        style={{
+          padding: "20px",
+          marginBottom: "28px",
+          borderRadius: "12px",
+          border: sameFaultSnapshot
+            ? "2px solid #16a34a"
+            : "2px solid #dc2626",
+          background: sameFaultSnapshot
+            ? "#f0fdf4"
+            : "#fff1f2",
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>
+          Fault Plan Verification
+        </h3>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.2fr 1fr 1fr",
+            gap: "14px 24px",
+            alignItems: "center",
+          }}
+        >
+          <strong></strong>
+          <strong>BUGGY</strong>
+          <strong>FIXED</strong>
+
+          <span>Plan ID</span>
+          <code>
+            {buggyFault?.planId ?? "Unavailable"}
+          </code>
+          <code>
+            {fixedFault?.planId ?? "Unavailable"}
+          </code>
+
+          <span>Fault type</span>
+          <code>
+            {buggyFault?.type ?? "Unavailable"}
+          </code>
+          <code>
+            {fixedFault?.type ?? "Unavailable"}
+          </code>
+
+          <span>Target</span>
+          <span>
+            {buggyFault?.target ?? "Unavailable"}
+          </span>
+          <span>
+            {fixedFault?.target ?? "Unavailable"}
+          </span>
+
+          <span>Attempt</span>
+          <span>
+            {buggyFault?.attempt ?? "Unavailable"}
+          </span>
+          <span>
+            {fixedFault?.attempt ?? "Unavailable"}
+          </span>
+
+          <span>SHA-256</span>
+          <code title={buggyFault?.hash}>
+            {shortHash(buggyFault?.hash)}
+          </code>
+          <code title={fixedFault?.hash}>
+            {shortHash(fixedFault?.hash)}
+          </code>
+        </div>
+
+        <div
+          style={{
+            marginTop: "22px",
+            padding: "12px",
+            borderRadius: "8px",
+            textAlign: "center",
+            fontWeight: 800,
+            color: sameFaultSnapshot
+              ? "#15803d"
+              : "#b91c1c",
+          }}
+        >
+          {sameFaultSnapshot
+            ? "✓ SAME STORED FAULT SNAPSHOT"
+            : "⚠ FAULT SNAPSHOTS DO NOT MATCH"}
+        </div>
+      </section>
 
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "1.3fr 1fr 1fr",
-          gap: "12px 24px",
+          gap: "14px 24px",
           alignItems: "center",
-          marginTop: "24px",
         }}
       >
         <strong></strong>
         <strong>BUGGY</strong>
         <strong>FIXED</strong>
-
-        <span>Fault</span>
-        <span>
-          {buggyRun.faultPlan?.name ?? "—"}
-        </span>
-        <span>
-          {fixedRun.faultPlan?.name ?? "—"}
-        </span>
-
-        <span>Fault hash</span>
-        <code title={buggyHash}>
-          {buggyHash.slice(0, 10)}...
-        </code>
-        <code title={fixedHash}>
-          {fixedHash.slice(0, 10)}...
-        </code>
 
         <span>Charge attempts</span>
         <strong>{buggyAttempts}</strong>
@@ -107,6 +201,7 @@ function ComparisonCard({
         <strong>{fixedCharges}</strong>
 
         <span>Invariant</span>
+
         <strong
           style={{
             color:
@@ -130,11 +225,20 @@ function ComparisonCard({
         </strong>
 
         <span>Outcome</span>
-        <strong style={{ color: "#b91c1c" }}>
+
+        <strong
+          style={{
+            color: "#b91c1c",
+          }}
+        >
           UNSAFE
         </strong>
 
-        <strong style={{ color: "#15803d" }}>
+        <strong
+          style={{
+            color: "#15803d",
+          }}
+        >
           CORRECT UNDER TESTED FAULT
         </strong>
       </div>
