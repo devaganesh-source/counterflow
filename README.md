@@ -114,7 +114,7 @@ The invariant checker is deterministic application code. An LLM does **not** dec
 
 The following diagram shows how CounterFlow launches resilience experiments, orchestrates the checkout workflow, records evidence, evaluates invariants, and compares Buggy and Fixed implementations.
 
-![CounterFlow AWS Architecture](docs/counterflow-architecture.png.png)
+![CounterFlow AWS Architecture](docs/counterflow-architecture.png)
 
 ### Execution flow
 
