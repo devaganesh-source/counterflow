@@ -13,14 +13,6 @@ function countAttempts(run: RunResponse) {
   ).length;
 }
 
-function countCharges(run: RunResponse) {
-  return (run.traces ?? []).filter(
-    (trace) =>
-      trace.operation === "PaymentCharged" &&
-      trace.phase === "SIDE_EFFECT_COMMITTED",
-  ).length;
-}
-
 function shortHash(hash?: string) {
   if (!hash) {
     return "Unavailable";
@@ -38,8 +30,11 @@ function ComparisonCard({
   const buggyAttempts = countAttempts(buggyRun);
   const fixedAttempts = countAttempts(fixedRun);
 
-  const buggyCharges = countCharges(buggyRun);
-  const fixedCharges = countCharges(fixedRun);
+  const buggyCharges =
+    buggyRun.invariant?.actualChargeCount ?? "Unavailable";
+
+  const fixedCharges =
+    fixedRun.invariant?.actualChargeCount ?? "Unavailable";
 
   const buggyInvariant =
     buggyRun.invariant?.status ?? "UNKNOWN";
