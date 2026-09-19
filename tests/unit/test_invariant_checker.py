@@ -12,6 +12,13 @@ def test_charge_at_most_once_passes_with_one_charge():
             "component": "ChargePayment",
             "orderId": "order_1",
             "phase": "SIDE_EFFECT_COMMITTED",
+        },
+        {
+            "sequence": 2,
+            "operation": "OrderConfirmed",
+            "component": "ConfirmOrder",
+            "orderId": "order_1",
+            "phase": "SIDE_EFFECT_COMMITTED",
         }
     ]
 
@@ -20,7 +27,8 @@ def test_charge_at_most_once_passes_with_one_charge():
 
     assert result["status"] == "PASSED"
     assert result["actual"] == 1
-    assert result["expected"] == "<= 1"
+    assert result["expected"] == "= 1"
+    assert result["orderConfirmed"] is True
     assert result["firstFailingSequence"] is None
     
     assert analysis["firstFailingSequence"] is None
@@ -46,6 +54,13 @@ def test_charge_at_most_once_fails_on_second_charge():
             "phase": "ATTEMPT_FAILED",
         },
         {
+            "sequence": 8,
+            "operation": "OrderConfirmed",
+            "component": "ConfirmOrder",
+            "orderId": "order_1",
+            "phase": "SIDE_EFFECT_COMMITTED",
+        },
+        {
             "sequence": 9,
             "operation": "PaymentCharged",
             "component": "ChargePayment",
@@ -59,7 +74,8 @@ def test_charge_at_most_once_fails_on_second_charge():
 
     assert result["status"] == "FAILED"
     assert result["actual"] == 2
-    assert result["expected"] == "<= 1"
+    assert result["expected"] == "= 1"
+    assert result["orderConfirmed"] is True
     assert result["firstFailingSequence"] == 9
     
     assert analysis["firstFailingSequence"] == 9
@@ -92,6 +108,13 @@ def test_buggy_duplicate_charge_reports_business_impact():
             "component": "ChargePayment",
             "orderId": "order_buggy",
             "phase": "ATTEMPT_FAILED",
+        },
+        {
+            "sequence": 8,
+            "operation": "OrderConfirmed",
+            "component": "ConfirmOrder",
+            "orderId": "order_buggy",
+            "phase": "SIDE_EFFECT_COMMITTED",
         },
         {
             "sequence": 9,
@@ -149,6 +172,13 @@ def test_fixed_retry_reports_no_overcharge():
             "phase": "ATTEMPT_FAILED",
         },
         {
+            "sequence": 8,
+            "operation": "OrderConfirmed",
+            "component": "ConfirmOrder",
+            "orderId": "order_fixed",
+            "phase": "SIDE_EFFECT_COMMITTED",
+        },
+        {
             "sequence": 9,
             "operation": "PaymentReused",
             "component": "ChargePayment",
@@ -162,6 +192,7 @@ def test_fixed_retry_reports_no_overcharge():
     analysis = build_trace_analysis(trace, result)
 
     assert result["status"] == "PASSED"
+    assert result["orderConfirmed"] is True
     assert result["expectedChargeCount"] == 1
     assert result["actualChargeCount"] == 1
     assert result["expectedAmount"] == 999
@@ -174,3 +205,56 @@ def test_fixed_retry_reports_no_overcharge():
     assert analysis["firstFailingOperation"] is None
     assert analysis["firstFailingComponent"] is None
     assert analysis["reason"] is None
+
+
+def test_fails_if_charged_but_not_confirmed():
+    trace = [
+        {
+            "sequence": 6,
+            "operation": "PaymentCharged",
+            "component": "ChargePayment",
+            "orderId": "order_unconfirmed",
+            "phase": "SIDE_EFFECT_COMMITTED",
+            "evidence": {"amount": 999}
+        }
+    ]
+    
+    result = evaluate_charge_at_most_once(trace, "order_unconfirmed")
+    analysis = build_trace_analysis(trace, result)
+
+    assert result["status"] == "FAILED"
+    assert result["expected"] == "= 0"
+    assert result["actual"] == 1
+    assert result["orderConfirmed"] is False
+    assert result["firstFailingSequence"] == 6
+    
+    assert analysis["firstFailingSequence"] == 6
+    assert analysis["firstFailingOperation"] == "PaymentCharged"
+    assert analysis["firstFailingComponent"] == "ChargePayment"
+    assert analysis["reason"] == "Payment charged but the order was never confirmed"
+
+
+def test_fails_if_confirmed_but_not_charged():
+    trace = [
+        {
+            "sequence": 8,
+            "operation": "OrderConfirmed",
+            "component": "ConfirmOrder",
+            "orderId": "order_no_charge",
+            "phase": "SIDE_EFFECT_COMMITTED"
+        }
+    ]
+    
+    result = evaluate_charge_at_most_once(trace, "order_no_charge")
+    analysis = build_trace_analysis(trace, result)
+
+    assert result["status"] == "FAILED"
+    assert result["expected"] == "= 1"
+    assert result["actual"] == 0
+    assert result["orderConfirmed"] is True
+    assert result["firstFailingSequence"] == 8
+    
+    assert analysis["firstFailingSequence"] == 8
+    assert analysis["firstFailingOperation"] == "OrderConfirmed"
+    assert analysis["firstFailingComponent"] == "ConfirmOrder"
+    assert analysis["reason"] == "Confirmed order violated payment postcondition: exactly one committed payment charge is required"
