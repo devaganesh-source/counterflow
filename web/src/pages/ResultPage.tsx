@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+
 import {
   compareRun,
   getRun,
   type RunResponse,
   type WorkflowVersion,
 } from "../api/runs";
+
 import FaultPlanCard from "../components/FaultPlanCard";
 import InvariantResultCard from "../components/InvariantResultCard";
 import InvariantUnavailableCard from "../components/InvariantUnavailableCard";
@@ -189,122 +195,108 @@ function ResultPage() {
   }
 
   if (!runId) {
-    return <p>Missing run ID.</p>;
+    return (
+      <main className="cf-result-page">
+        <nav className="cf-nav">
+          <div className="cf-brand">
+            <span className="cf-logo">CF</span>
+
+            <div>
+              <strong>CounterFlow</strong>
+              <span>Resilience Testing</span>
+            </div>
+          </div>
+        </nav>
+
+        <section className="cf-result-message error">
+          <div className="cf-section-label">
+            REQUEST ERROR
+          </div>
+
+          <h1>Missing run ID</h1>
+
+          <p>
+            CounterFlow cannot load an execution result
+            without a run identifier.
+          </p>
+
+          <button
+            className="cf-secondary-button"
+            onClick={() => navigate("/")}
+          >
+            ← Back to launcher
+          </button>
+        </section>
+      </main>
+    );
   }
 
   if (error) {
     return (
-      <main
-        style={{
-          padding: "40px",
-          fontFamily: "Arial",
-          maxWidth: "760px",
-          margin: "auto",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "13px",
-            fontWeight: 800,
-            letterSpacing: "2px",
-            color: "#475569",
-          }}
-        >
-          COUNTERFLOW
-        </div>
+      <main className="cf-result-page">
+        <nav className="cf-nav">
+          <div className="cf-brand">
+            <span className="cf-logo">CF</span>
 
-        <h1>Result unavailable</h1>
+            <div>
+              <strong>CounterFlow</strong>
+              <span>Resilience Testing</span>
+            </div>
+          </div>
+        </nav>
 
-        <section
-          style={{
-            marginTop: "24px",
-            padding: "24px",
-            borderRadius: "14px",
-            border: "2px solid #dc2626",
-            background: "#fff1f2",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 800,
-              letterSpacing: "2px",
-              color: "#991b1b",
-            }}
-          >
+        <section className="cf-result-message error">
+          <div className="cf-section-label">
             REQUEST FAILED
           </div>
 
-          <h2
-            style={{
-              color: "#b91c1c",
-              marginBottom: "8px",
-            }}
-          >
-            ✕ {error}
-          </h2>
+          <h1>Result unavailable</h1>
 
-          <p style={{ marginBottom: 0 }}>
+          <p>{error}</p>
+
+          <small>
             No resilience result or invariant conclusion
             can be made for this request.
-          </p>
-        </section>
+          </small>
 
-        <button
-          onClick={() => navigate("/")}
-          style={{
-            marginTop: "20px",
-            padding: "10px 18px",
-            cursor: "pointer",
-          }}
-        >
-          Back to launcher
-        </button>
+          <button
+            className="cf-secondary-button"
+            onClick={() => navigate("/")}
+          >
+            ← Back to launcher
+          </button>
+        </section>
       </main>
     );
   }
 
   if (!run) {
     return (
-      <main
-        style={{
-          padding: "40px",
-          fontFamily: "Arial",
-          maxWidth: "760px",
-          margin: "auto",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "13px",
-            fontWeight: 800,
-            letterSpacing: "2px",
-            color: "#475569",
-          }}
-        >
-          COUNTERFLOW
-        </div>
+      <main className="cf-result-page">
+        <nav className="cf-nav">
+          <div className="cf-brand">
+            <span className="cf-logo">CF</span>
 
-        <h1>Loading result...</h1>
+            <div>
+              <strong>CounterFlow</strong>
+              <span>Resilience Testing</span>
+            </div>
+          </div>
 
-        <section
-          style={{
-            marginTop: "24px",
-            padding: "22px",
-            borderRadius: "14px",
-            border: "2px solid #2563eb",
-            background: "#eff6ff",
-          }}
-        >
-          <strong
-            style={{
-              color: "#1d4ed8",
-            }}
-          >
-            RUNNING
-          </strong>
+          <div className="cf-status">
+            <span className="cf-status-dot" />
+            FETCHING RESULT
+          </div>
+        </nav>
 
-          <p style={{ marginBottom: 0 }}>
+        <section className="cf-result-message loading">
+          <div className="cf-section-label">
+            EXECUTION ANALYSIS
+          </div>
+
+          <h1>Loading result...</h1>
+
+          <p>
             Waiting for the latest execution state.
             No invariant conclusion has been made yet.
           </p>
@@ -320,168 +312,214 @@ function ResultPage() {
   ].includes(run.status);
 
   return (
-    <main
-      style={{
-        padding: "40px",
-        fontFamily: "Arial",
-        maxWidth: "900px",
-        margin: "auto",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "20px",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 800,
-              letterSpacing: "2px",
-              color: "#475569",
-            }}
-          >
-            COUNTERFLOW
-          </div>
+    <main className="cf-result-page">
+      <nav className="cf-nav">
+        <div className="cf-brand">
+          <span className="cf-logo">CF</span>
 
-          <h1 style={{ marginBottom: "6px" }}>
-            Result
-          </h1>
+          <div>
+            <strong>CounterFlow</strong>
+            <span>Resilience Testing</span>
+          </div>
         </div>
 
-        <strong
-          style={{
-            padding: "8px 14px",
-            borderRadius: "20px",
-            background:
-              run.status === "SUCCEEDED"
-                ? "#dcfce7"
-                : executionFailed
-                  ? "#fee2e2"
-                  : "#dbeafe",
-            color:
-              run.status === "SUCCEEDED"
-                ? "#166534"
-                : executionFailed
-                  ? "#991b1b"
-                  : "#1d4ed8",
-          }}
-        >
-          {run.status}
-        </strong>
-      </div>
+        <div className="cf-status">
+          <span className="cf-status-dot" />
+          ANALYSIS COMPLETE
+        </div>
+      </nav>
 
-      <p>
-        <strong>Run ID:</strong>{" "}
-        {run.runId}
-      </p>
+      <header className="cf-result-header">
+        <div className="cf-result-topline">
+          <div>
+            <div className="cf-section-label">
+              RESILIENCE TEST RESULT
+            </div>
 
-      {workflowVersion && (
-        <p>
-          <strong>
-            Workflow Version:
-          </strong>{" "}
-          {workflowVersion}
-        </p>
-      )}
+            <h1>Execution analysis</h1>
 
-      <p>
-        <strong>
-          Fault Profile:
-        </strong>{" "}
-        Payment acknowledgement lost
-      </p>
+            <p className="cf-result-subtitle">
+              Workflow completion and business correctness
+              are evaluated independently.
+            </p>
+          </div>
 
-      <hr />
+          {workflowVersion && (
+            <span
+              className={`cf-run-badge ${
+                workflowVersion === "fixed"
+                  ? "fixed"
+                  : ""
+              }`}
+            >
+              {workflowVersion.toUpperCase()} RUN
+            </span>
+          )}
+        </div>
 
-      <RunStateBanner status={run.status} />
+        <div className="cf-run-meta">
+          <div className="cf-meta-item">
+            <span>RUN ID</span>
+            <code>{run.runId}</code>
+          </div>
+
+          {workflowVersion && (
+            <div className="cf-meta-item">
+              <span>WORKFLOW VERSION</span>
+              <strong>{workflowVersion}</strong>
+            </div>
+          )}
+
+          <div className="cf-meta-item">
+            <span>FAULT PROFILE</span>
+            <strong>
+              Payment acknowledgement lost
+            </strong>
+          </div>
+        </div>
+      </header>
+
+      <section className="cf-result-summary-grid">
+        <RunStateBanner status={run.status} />
+
+        {run.invariant ? (
+          <InvariantResultCard
+            invariant={run.invariant}
+            orderedChargeIds={orderedChargeIds}
+            traces={run.traces ?? []}
+          />
+        ) : (
+          <InvariantUnavailableCard
+            executionStatus={run.status}
+          />
+        )}
+      </section>
 
       {run.faultPlan && (
-        <FaultPlanCard
-          faultPlan={run.faultPlan}
-        />
-      )}
+        <section className="cf-result-section">
+          <div className="cf-result-section-heading">
+            <div>
+              <div className="cf-section-label">
+                FAILURE SCENARIO
+              </div>
 
-      {run.invariant ? (
-        <InvariantResultCard
-          invariant={run.invariant}
-          orderedChargeIds={orderedChargeIds}
-          traces={run.traces ?? []}
-        />
-      ) : (
-        <InvariantUnavailableCard
-          executionStatus={run.status}
-        />
+              <h2>Injected fault</h2>
+            </div>
+
+            <span>REPRODUCIBLE</span>
+          </div>
+
+          <FaultPlanCard
+            faultPlan={run.faultPlan}
+          />
+        </section>
       )}
 
       {firstFailingSequence !== null && (
-        <FirstFailingPrefix
-          traces={run.traces ?? []}
-          firstFailingSequence={firstFailingSequence}
-          violationReason={violationReason}
-        />
+        <section className="cf-result-section">
+          <div className="cf-result-section-heading">
+            <div>
+              <div className="cf-section-label">
+                FAILURE LOCALIZATION
+              </div>
+
+              <h2>First failing prefix</h2>
+            </div>
+
+            <span>BACKEND ANALYSIS</span>
+          </div>
+
+          <FirstFailingPrefix
+            traces={run.traces ?? []}
+            firstFailingSequence={
+              firstFailingSequence
+            }
+            violationReason={violationReason}
+          />
+        </section>
       )}
 
-      <h3>Execution Timeline</h3>
+      <section className="cf-result-section">
+        <div className="cf-result-section-heading">
+          <div>
+            <div className="cf-section-label">
+              EXECUTION TRACE
+            </div>
 
-      {importantTraces.length === 0 ? (
-        <p>No trace events available.</p>
-      ) : (
-        importantTraces.map((trace) => {
-          const isFirstViolation =
-            firstFailingSequence !== null &&
-            trace.sequence === firstFailingSequence;
+            <h2>Timeline</h2>
+          </div>
 
-          return (
-            <TraceItem
-              key={trace.sequence}
-              trace={trace}
-              isFirstViolation={isFirstViolation}
-              violationReason={
-                isFirstViolation
-                  ? violationReason
-                  : null
-              }
-            />
-          );
-        })
-      )}
+          <span>
+            {importantTraces.length} IMPORTANT EVENTS
+          </span>
+        </div>
+
+        {importantTraces.length === 0 ? (
+          <p className="cf-empty-state">
+            No trace events available.
+          </p>
+        ) : (
+          <div className="cf-trace-container">
+            {importantTraces.map((trace) => {
+              const isFirstViolation =
+                firstFailingSequence !== null &&
+                trace.sequence ===
+                  firstFailingSequence;
+
+              return (
+                <TraceItem
+                  key={trace.sequence}
+                  trace={trace}
+                  isFirstViolation={
+                    isFirstViolation
+                  }
+                  violationReason={
+                    isFirstViolation
+                      ? violationReason
+                      : null
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {(run.startDate || run.stopDate) && (
+          <div className="cf-time-range">
+            {run.startDate && (
+              <span>
+                STARTED
+                <strong>
+                  {new Date(
+                    run.startDate,
+                  ).toLocaleString()}
+                </strong>
+              </span>
+            )}
+
+            {run.stopDate && (
+              <span>
+                FINISHED
+                <strong>
+                  {new Date(
+                    run.stopDate,
+                  ).toLocaleString()}
+                </strong>
+              </span>
+            )}
+          </div>
+        )}
+      </section>
 
       {executionFailed && (
-        <section
-          style={{
-            marginTop: "28px",
-            padding: "24px",
-            borderRadius: "14px",
-            border: "2px solid #dc2626",
-            background: "#fff1f2",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 800,
-              letterSpacing: "2px",
-              color: "#991b1b",
-            }}
-          >
+        <section className="cf-execution-warning">
+          <div className="cf-section-label">
             EXECUTION FAILURE
           </div>
 
-          <h2
-            style={{
-              marginBottom: "8px",
-              color: "#b91c1c",
-            }}
-          >
-            ✕ Execution failed
-          </h2>
+          <h2>✕ Execution failed</h2>
 
-          <p style={{ marginBottom: 0 }}>
+          <p>
             This execution did not complete successfully.
             It must not be interpreted as a passing
             resilience result.
@@ -489,106 +527,54 @@ function ResultPage() {
         </section>
       )}
 
-      {run.startDate && (
-        <p>
-          <strong>Started:</strong>{" "}
-          {new Date(
-            run.startDate,
-          ).toLocaleString()}
-        </p>
-      )}
-
-      {run.stopDate && (
-        <p>
-          <strong>Finished:</strong>{" "}
-          {new Date(
-            run.stopDate,
-          ).toLocaleString()}
-        </p>
-      )}
-
       {workflowVersion === "buggy" && (
-        <div
-          style={{
-            marginTop: "32px",
-            padding: "24px",
-            borderRadius: "14px",
-            border: "1px solid #cbd5e1",
-            background: "#f8fafc",
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>
-            Compare with Fixed
-          </h2>
+        <section className="cf-prove-fix">
+          <div>
+            <div className="cf-section-label">
+              NEXT EXPERIMENT
+            </div>
 
-          <p
-            style={{
-              color: "#475569",
-            }}
-          >
-            Run the exact same stored fault
-            against the fixed workflow and
-            compare the results side by side.
-          </p>
+            <h2>Prove the fix.</h2>
+
+            <p>
+              Replay the exact stored fault against the
+              fixed implementation and compare both
+              executions side by side.
+            </p>
+
+            <div className="cf-proof-tags">
+              <span>SAME FAULT PLAN</span>
+              <span>SAME CONDITIONS</span>
+              <span>SAME EVIDENCE MODEL</span>
+            </div>
+          </div>
 
           <button
+            className="cf-compare-button"
             onClick={handleCompare}
             disabled={compareLoading}
-            style={{
-              padding: "12px 20px",
-              marginTop: "8px",
-              cursor: compareLoading
-                ? "not-allowed"
-                : "pointer",
-              opacity: compareLoading
-                ? 0.65
-                : 1,
-              fontWeight: 700,
-            }}
           >
             {compareLoading
               ? "Running fixed comparison..."
-              : "Run same fault against fixed version"}
+              : "Compare with Fixed →"}
           </button>
 
-          {compareError ? (
-            <p
-              style={{
-                marginBottom: 0,
-                marginTop: "14px",
-                color: "#b91c1c",
-                fontWeight: 700,
-              }}
-            >
+          {compareError && (
+            <div className="cf-compare-error">
               ✕ {compareError}
-            </p>
-          ) : (
-            <p
-              style={{
-                marginBottom: 0,
-                marginTop: "14px",
-                fontSize: "13px",
-                color: "#64748b",
-              }}
-            >
-              The fixed workflow will reuse the exact
-              stored fault snapshot and hash from this
-              Buggy run.
-            </p>
+            </div>
           )}
-        </div>
+        </section>
       )}
 
-      <button
-        onClick={() => navigate("/")}
-        style={{
-          padding: "10px 20px",
-          marginTop: "20px",
-          cursor: "pointer",
-        }}
-      >
-        Start another run
-      </button>
+      <div className="cf-result-actions">
+        <button
+          className="cf-secondary-button"
+          onClick={() => navigate("/")}
+        >
+          ← Start another run
+        </button>
+      </div>
     </main>
   );
 }

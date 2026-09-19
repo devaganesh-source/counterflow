@@ -41,7 +41,7 @@ function getTraceLabel(trace: Trace) {
   if (trace.operation === "PaymentCharged") {
     return {
       title: `Charge attempt ${trace.attempt}`,
-      message: "PaymentCharged",
+      message: "Payment charged",
       icon: "✓",
     };
   }
@@ -84,139 +84,117 @@ function TraceColumn({
     run.traceAnalysis?.firstFailingSequence ?? null;
 
   return (
-    <section
-      style={{
-        flex: 1,
-        minWidth: "0",
-        padding: "24px",
-        borderRadius: "14px",
-        border:
-          mode === "buggy"
-            ? "2px solid #dc2626"
-            : "2px solid #16a34a",
-        background:
-          mode === "buggy"
-            ? "#fff7f7"
-            : "#f6fff8",
-      }}
-    >
-      <h2
-        style={{
-          marginTop: 0,
-          textAlign: "center",
-          color:
-            mode === "buggy"
-              ? "#b91c1c"
-              : "#15803d",
-        }}
-      >
-        {title}
-      </h2>
+    <section className={`cf-compare-trace-column ${mode}`}>
+      <div className="cf-compare-trace-header">
+        <div>
+          <span>WORKFLOW VERSION</span>
+          <h3>{title}</h3>
+        </div>
 
-      {traces.map((trace) => {
-        const display = getTraceLabel(trace);
+        <div className="cf-compare-trace-status">
+          {mode === "buggy"
+            ? "INVARIANT FAILED"
+            : "INVARIANT PASSED"}
+        </div>
+      </div>
 
-        const isViolation =
-          mode === "buggy" &&
-          firstFailingSequence !== null &&
-          trace.sequence === firstFailingSequence;
+      <div className="cf-compare-trace-list">
+        {traces.map((trace, index) => {
+          const display = getTraceLabel(trace);
 
-        const isDeduplicated =
-          mode === "fixed" &&
-          trace.operation === "PaymentReused";
+          const isViolation =
+            mode === "buggy" &&
+            firstFailingSequence !== null &&
+            trace.sequence === firstFailingSequence;
 
-        const chargeId =
-          typeof trace.evidence?.chargeId === "string"
-            ? trace.evidence.chargeId
-            : null;
+          const isDeduplicated =
+            mode === "fixed" &&
+            trace.operation === "PaymentReused";
 
-        return (
-          <div
-            key={trace.sequence}
-            style={{
-              position: "relative",
-              padding: "16px",
-              marginBottom: "14px",
-              borderRadius: "10px",
-              border: isViolation
-                ? "2px solid #dc2626"
-                : isDeduplicated
-                  ? "2px solid #16a34a"
-                  : "1px solid #cbd5e1",
-              background: isViolation
-                ? "#fee2e2"
-                : isDeduplicated
-                  ? "#dcfce7"
-                  : "#ffffff",
-            }}
-          >
+          const isFault =
+            trace.operation === "InjectedFailure";
+
+          const chargeId =
+            typeof trace.evidence?.chargeId === "string"
+              ? trace.evidence.chargeId
+              : null;
+
+          const itemClass = isViolation
+            ? "violation"
+            : isDeduplicated
+              ? "deduplicated"
+              : isFault
+                ? "fault"
+                : "normal";
+
+          return (
             <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: "16px",
-              }}
+              className="cf-compare-trace-step-wrapper"
+              key={trace.sequence}
             >
-              <strong>{display.title}</strong>
+              <div
+                className={`cf-compare-trace-step ${itemClass}`}
+              >
+                <div className="cf-compare-step-marker">
+                  {isViolation
+                    ? "✕"
+                    : isDeduplicated
+                      ? "↻"
+                      : display.icon}
+                </div>
 
-              <span>{display.icon}</span>
+                <div className="cf-compare-step-content">
+                  <div className="cf-compare-step-top">
+                    <strong>{display.title}</strong>
+
+                    <span>#{trace.sequence}</span>
+                  </div>
+
+                  <p>{display.message}</p>
+
+                  {chargeId && (
+                    <code>{chargeId}</code>
+                  )}
+
+                  {isFault && (
+                    <div className="cf-step-badge fault">
+                      SAME INJECTED FAULT
+                    </div>
+                  )}
+
+                  {isViolation && (
+                    <div className="cf-step-badge violation">
+                      DUPLICATE CHARGE — VIOLATION
+                    </div>
+                  )}
+
+                  {isDeduplicated && (
+                    <div className="cf-step-badge deduplicated">
+                      EXISTING CHARGE REUSED — DEDUPLICATED
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {index < traces.length - 1 && (
+                <div className="cf-compare-trace-connector">
+                  ↓
+                </div>
+              )}
             </div>
+          );
+        })}
+      </div>
 
-            <p
-              style={{
-                margin: "8px 0 4px",
-                fontWeight: 700,
-              }}
-            >
-              {display.message}
-            </p>
+      <div className={`cf-column-verdict ${mode}`}>
+        <span>FINAL BUSINESS RESULT</span>
 
-            {chargeId && (
-              <code
-                style={{
-                  display: "block",
-                  marginTop: "8px",
-                  wordBreak: "break-all",
-                }}
-              >
-                {chargeId}
-              </code>
-            )}
-
-            {isViolation && (
-              <div
-                style={{
-                  marginTop: "12px",
-                  padding: "8px 10px",
-                  borderRadius: "6px",
-                  background: "#dc2626",
-                  color: "white",
-                  fontSize: "12px",
-                  fontWeight: 800,
-                }}
-              >
-                ← VIOLATION
-              </div>
-            )}
-
-            {isDeduplicated && (
-              <div
-                style={{
-                  marginTop: "12px",
-                  padding: "8px 10px",
-                  borderRadius: "6px",
-                  background: "#16a34a",
-                  color: "white",
-                  fontSize: "12px",
-                  fontWeight: 800,
-                }}
-              >
-                ← DEDUPLICATED
-              </div>
-            )}
-          </div>
-        );
-      })}
+        <strong>
+          {mode === "buggy"
+            ? "✕ DUPLICATE PAYMENT"
+            : "✓ DUPLICATE PREVENTED"}
+        </strong>
+      </div>
     </section>
   );
 }
@@ -226,37 +204,22 @@ function TraceComparison({
   fixedRun,
 }: TraceComparisonProps) {
   return (
-    <section
-      style={{
-        marginTop: "36px",
-      }}
-    >
-      <div
-        style={{
-          marginBottom: "22px",
-        }}
-      >
-        <h2 style={{ marginBottom: "6px" }}>
-          Execution Trace Comparison
-        </h2>
+    <section className="cf-trace-comparison">
+      <div className="cf-trace-comparison-heading">
+        <div className="cf-section-label">
+          EXECUTION TRACE COMPARISON
+        </div>
 
-        <p
-          style={{
-            marginTop: 0,
-            color: "#64748b",
-          }}
-        >
-          Same failure schedule. Different retry behaviour.
+        <h2>Same failure. Different retry behaviour.</h2>
+
+        <p>
+          Follow both executions through the exact point where
+          the buggy workflow duplicates the payment and the fixed
+          workflow reuses it.
         </p>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "24px",
-          alignItems: "flex-start",
-        }}
-      >
+      <div className="cf-trace-comparison-grid">
         <TraceColumn
           title="BUGGY"
           run={buggyRun}

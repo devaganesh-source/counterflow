@@ -283,151 +283,186 @@ function LiveRunPage() {
   }
 
   return (
-    <main
-      style={{
-        padding: "40px",
-        fontFamily: "Arial",
-        maxWidth: "900px",
-        margin: "auto",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "20px",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 800,
-              letterSpacing: "2px",
-              color: "#475569",
-            }}
-          >
-            COUNTERFLOW
-          </div>
+    <main className="cf-live-page">
+      <nav className="cf-live-nav">
+        <div className="cf-live-brand">
+          <span className="cf-live-brand-mark">
+            CF
+          </span>
 
-          <h1
-            style={{
-              marginBottom: "6px",
-            }}
-          >
-            Live Run
-          </h1>
+          <div>
+            <strong>CounterFlow</strong>
+            <span>RESILIENCE TESTING</span>
+          </div>
         </div>
 
-        <strong
-          style={{
-            padding: "8px 14px",
-            borderRadius: "20px",
-            background: "#dbeafe",
-            color: "#1d4ed8",
-          }}
-        >
-          {run?.status ?? "RUNNING"}
-        </strong>
-      </div>
+        <div className="cf-live-status">
+          <span className="cf-live-pulse" />
+          LIVE EXECUTION
+        </div>
+      </nav>
 
-      <p>
-        <strong>Run ID:</strong>{" "}
-        {runId}
-      </p>
+      <section className="cf-live-shell">
+        <header className="cf-live-hero">
+          <div>
+            <div className="cf-section-label">
+              RESILIENCE TEST IN PROGRESS
+            </div>
 
-      {workflowVersion && (
-        <p>
-          <strong>
-            Workflow Version:
-          </strong>{" "}
-          {workflowVersion}
-        </p>
-      )}
+            <h1>
+              Watching the failure unfold.
+            </h1>
 
-      <p>
-        <strong>Fault:</strong>{" "}
-        Payment acknowledgement lost
-      </p>
-
-      <hr />
-
-      <RunStateBanner
-        status={run?.status ?? "RUNNING"}
-      />
-
-      {error && (
-        <section
-          style={{
-            marginTop: "24px",
-            marginBottom: "24px",
-            padding: "22px",
-            borderRadius: "14px",
-            border: "2px solid #f59e0b",
-            background: "#fffbeb",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 800,
-              letterSpacing: "2px",
-              color: "#92400e",
-            }}
-          >
-            {errorType ===
-            "API_UNAVAILABLE"
-              ? "API UNAVAILABLE"
-              : "POLLING ERROR"}
+            <p>
+              CounterFlow is following the execution
+              trace as the configured fault is injected
+              and the workflow responds.
+            </p>
           </div>
 
-          <h3
-            style={{
-              marginBottom: "8px",
-              color: "#92400e",
-            }}
-          >
-            ⚠ {error}
-          </h3>
+          <div className="cf-live-running-badge">
+            <span className="cf-live-pulse" />
+            {run?.status ?? "RUNNING"}
+          </div>
+        </header>
 
-          <p
-            style={{
-              marginBottom: 0,
-            }}
-          >
-            No pass/fail conclusion has been
-            made. CounterFlow will continue
-            checking the execution.
-          </p>
+        <section className="cf-live-context">
+          <div>
+            <span>RUN ID</span>
+            <code>{runId}</code>
+          </div>
+
+          <div>
+            <span>WORKFLOW</span>
+            <strong>
+              {(workflowVersion ?? "unknown").toUpperCase()}
+            </strong>
+          </div>
+
+          <div>
+            <span>INJECTED FAULT</span>
+            <strong className="cf-live-fault-text">
+              Payment acknowledgement lost
+            </strong>
+          </div>
+
+          <div>
+            <span>POLLING</span>
+            <strong>2 SECONDS</strong>
+          </div>
         </section>
-      )}
 
-      <h3>Execution Timeline</h3>
+        <section className="cf-live-state">
+          <RunStateBanner
+            status={run?.status ?? "RUNNING"}
+          />
+        </section>
 
-      {importantTraces.length === 0 ? (
-        <p>
-          Waiting for trace events...
-        </p>
-      ) : (
-        importantTraces.map(
-          (trace) => (
-            <TraceItem
-              key={trace.sequence}
-              trace={trace}
-            />
-          ),
-        )
-      )}
+        {error && (
+          <section className="cf-live-warning">
+            <div className="cf-live-warning-icon">
+              !
+            </div>
 
-      <p
-        style={{
-          color: "#64748b",
-          marginTop: "24px",
-        }}
-      >
-        Live — refreshing every 2 seconds...
-      </p>
+            <div>
+              <span>
+                {errorType === "API_UNAVAILABLE"
+                  ? "API UNAVAILABLE"
+                  : "POLLING ERROR"}
+              </span>
+
+              <strong>{error}</strong>
+
+              <p>
+                No invariant conclusion has been made.
+                CounterFlow will continue checking the
+                execution.
+              </p>
+            </div>
+          </section>
+        )}
+
+        <section className="cf-live-trace-panel">
+          <div className="cf-live-trace-heading">
+            <div>
+              <div className="cf-section-label">
+                LIVE EXECUTION TRACE
+              </div>
+
+              <h2>Failure timeline</h2>
+
+              <p>
+                Events appear as the workflow progresses.
+                Execution state and business correctness
+                are evaluated independently.
+              </p>
+            </div>
+
+            <div className="cf-live-legend">
+              <span className="fault">
+                <i />
+                INJECTED FAULT
+              </span>
+
+              <span className="retry">
+                <i />
+                RETRY / REUSE
+              </span>
+
+              <span className="violation">
+                <i />
+                VIOLATION
+              </span>
+
+              <span className="passed">
+                <i />
+                INVARIANT PASSED
+              </span>
+            </div>
+          </div>
+
+          <div className="cf-live-trace-list">
+            {importantTraces.length === 0 ? (
+              <div className="cf-live-waiting">
+                <span className="cf-live-pulse" />
+
+                <div>
+                  <strong>
+                    Waiting for trace events
+                  </strong>
+
+                  <p>
+                    CounterFlow is polling the
+                    execution every 2 seconds.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              importantTraces.map((trace) => (
+                <TraceItem
+                  key={trace.sequence}
+                  trace={trace}
+                />
+              ))
+            )}
+          </div>
+        </section>
+
+        <footer className="cf-live-footer">
+          <span className="cf-live-pulse" />
+
+          <span>
+            Live monitoring · refreshing every 2 seconds
+          </span>
+
+          <code>
+            {importantTraces.length} TRACE EVENT
+            {importantTraces.length === 1
+              ? ""
+              : "S"}
+          </code>
+        </footer>
+      </section>
     </main>
   );
 }

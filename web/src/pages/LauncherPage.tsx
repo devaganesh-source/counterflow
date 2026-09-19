@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { startRun, type WorkflowVersion } from "../api/runs";
+import "../App.css";
 
 function LauncherPage() {
   const navigate = useNavigate();
+
   const [workflowVersion, setWorkflowVersion] =
     useState<WorkflowVersion>("buggy");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,78 +39,173 @@ function LauncherPage() {
   }
 
   return (
-    <main
-      style={{
-        padding: "40px",
-        fontFamily: "Arial",
-        maxWidth: "620px",
-        margin: "auto",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "13px",
-          fontWeight: 800,
-          letterSpacing: "2px",
-          color: "#475569",
-        }}
-      >
-        COUNTERFLOW
-      </div>
+    <main className="cf-page">
+      <nav className="cf-nav">
+        <div className="cf-brand">
+          <span className="cf-logo">CF</span>
 
-      <h1 style={{ marginBottom: "8px" }}>Checkout workflow</h1>
-      <p style={{ color: "#64748b", marginTop: 0 }}>
-        Run the same failure against buggy and fixed workflow versions.
-      </p>
+          <div>
+            <strong>CounterFlow</strong>
+            <span>Resilience Testing</span>
+          </div>
+        </div>
 
-      <section style={{ marginTop: "30px" }}>
-        <h3>Workflow</h3>
+        <div className="cf-status">
+          <span className="cf-status-dot" />
+          SYSTEM READY
+        </div>
+      </nav>
 
-        <label style={{ display: "block", marginBottom: "10px" }}>
-          <input
-            type="radio"
-            checked={workflowVersion === "buggy"}
-            onChange={() => setWorkflowVersion("buggy")}
-          />{" "}
-          Buggy
-        </label>
+      <section className="cf-hero">
+        <div className="cf-eyebrow">
+          DISTRIBUTED SYSTEMS RESILIENCE
+        </div>
 
-        <label style={{ display: "block" }}>
-          <input
-            type="radio"
-            checked={workflowVersion === "fixed"}
-            onChange={() => setWorkflowVersion("fixed")}
-          />{" "}
-          Fixed
-        </label>
-      </section>
+        <h1>
+          Break workflows.
+          <br />
+          <span>Prove the fix.</span>
+        </h1>
 
-      <section style={{ marginTop: "28px" }}>
-        <h3>Fault profile</h3>
-        <p>Payment acknowledgement lost</p>
-
-        <h3>Fault plan</h3>
-        <code>payment-ack-lost-v1</code>
-      </section>
-
-      <button
-        onClick={handleRun}
-        disabled={loading}
-        style={{
-          padding: "12px 20px",
-          marginTop: "32px",
-          cursor: loading ? "not-allowed" : "pointer",
-          fontWeight: 700,
-        }}
-      >
-        {loading ? "Starting..." : "Run resilience test"}
-      </button>
-
-      {error && (
-        <p style={{ color: "#b91c1c", marginTop: "18px" }}>
-          <strong>Error:</strong> {error}
+        <p className="cf-hero-copy">
+          Inject controlled failures into distributed workflows,
+          observe their effects, and verify that recovery logic
+          preserves critical invariants.
         </p>
-      )}
+      </section>
+
+      <section className="cf-launch-card">
+        <div className="cf-card-header">
+          <div>
+            <span className="cf-section-label">
+              TEST SCENARIO
+            </span>
+            <h2>Checkout Workflow</h2>
+          </div>
+
+          <span className="cf-ready-badge">READY</span>
+        </div>
+
+        <div className="cf-workflow">
+          <div className="cf-workflow-step">
+            <span>01</span>
+            <strong>CreateOrder</strong>
+          </div>
+
+          <div className="cf-connector">→</div>
+
+          <div className="cf-workflow-step">
+            <span>02</span>
+            <strong>ReserveInventory</strong>
+          </div>
+
+          <div className="cf-connector">→</div>
+
+          <div className="cf-workflow-step cf-fault-step">
+            <span>03</span>
+            <strong>ChargePayment</strong>
+            <small>FAULT</small>
+          </div>
+
+          <div className="cf-connector">→</div>
+
+          <div className="cf-workflow-step">
+            <span>04</span>
+            <strong>ConfirmOrder</strong>
+          </div>
+        </div>
+
+        <div className="cf-config-grid">
+          <div className="cf-config-block">
+            <span className="cf-section-label">
+              WORKFLOW VERSION
+            </span>
+
+            <div className="cf-version-selector">
+              <button
+                type="button"
+                className={
+                  workflowVersion === "buggy"
+                    ? "cf-version active buggy"
+                    : "cf-version"
+                }
+                onClick={() =>
+                  setWorkflowVersion("buggy")
+                }
+              >
+                <span className="cf-version-dot" />
+                Buggy
+              </button>
+
+              <button
+                type="button"
+                className={
+                  workflowVersion === "fixed"
+                    ? "cf-version active fixed"
+                    : "cf-version"
+                }
+                onClick={() =>
+                  setWorkflowVersion("fixed")
+                }
+              >
+                <span className="cf-version-dot" />
+                Fixed
+              </button>
+            </div>
+          </div>
+
+          <div className="cf-config-block">
+            <span className="cf-section-label">
+              FAULT PROFILE
+            </span>
+
+            <div className="cf-fault-profile">
+              <div className="cf-fault-icon">⚡</div>
+
+              <div>
+                <strong>
+                  Payment acknowledgement lost
+                </strong>
+                <code>payment-ack-lost-v1</code>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="cf-launch-footer">
+          <div className="cf-test-info">
+            <span>FAULT INJECTION</span>
+            <span>INVARIANT CHECKING</span>
+            <span>TRACE ANALYSIS</span>
+          </div>
+
+          <button
+            className="cf-run-button"
+            onClick={handleRun}
+            disabled={loading}
+          >
+            {loading ? (
+              <>Starting test...</>
+            ) : (
+              <>Run resilience test <span>→</span></>
+            )}
+          </button>
+        </div>
+
+        {error && (
+          <div className="cf-error">
+            <strong>Unable to start test</strong>
+            <span>{error}</span>
+          </div>
+        )}
+      </section>
+
+      <footer className="cf-footer">
+        <span>COUNTERFLOW</span>
+        <span>
+          Controlled failure injection for distributed systems
+        </span>
+      </footer>
     </main>
   );
 }
