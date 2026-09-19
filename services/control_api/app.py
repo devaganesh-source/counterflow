@@ -16,6 +16,7 @@ lambda_client = boto3.client("lambda")
 TABLE_NAME = os.environ["TABLE_NAME"]
 STATE_MACHINE_ARN = os.environ["STATE_MACHINE_ARN"]
 INVARIANT_CHECKER_FUNCTION = os.environ["INVARIANT_CHECKER_FUNCTION"]
+DEMO_TOKEN = os.environ.get("DEMO_TOKEN", "")
 
 
 def json_default(value):
@@ -40,6 +41,25 @@ def api_response(status_code, body):
             default=json_default,
         ),
     }
+
+
+def get_header(event, header_name):
+    headers = event.get("headers") or {}
+    for key, value in headers.items():
+        if key.lower() == header_name.lower():
+            return value
+    return None
+
+
+def is_authorized(event):
+    if not DEMO_TOKEN:
+        return True
+
+    token = get_header(event, "x-demo-token") or get_header(event, "authorization")
+    if token and token.startswith("Bearer "):
+        token = token[7:].strip()
+
+    return token == DEMO_TOKEN
 
 
 def get_execution_arn(run_id):
@@ -495,6 +515,18 @@ def lambda_handler(event, context):
             "httpMethod",
             "",
         )
+
+        if method == "OPTIONS":
+            return api_response(200, {"message": "OK"})
+
+        if not is_authorized(event):
+            return api_response(
+                401,
+                {
+                    "message": "Unauthorized"
+                },
+            )
+
         resource = event.get("resource", "")
         path = event.get("path", "")
 

@@ -5,11 +5,26 @@ Description: >
   CounterFlow serverless infrastructure.
   DynamoDB + Lambda + Step Functions + API Gateway.
 
+# ============================================================
+# Parameters
+# ============================================================
+
+Parameters:
+  DemoToken:
+    Type: String
+    Description: Token used for authenticating demo API requests.
+    Default: ""
+
+# ============================================================
+# Globals
+# ============================================================
+
 Globals:
   Function:
     Runtime: python3.12
     Timeout: 15
     MemorySize: 256
+
     Environment:
       Variables:
         TABLE_NAME: !Ref CounterFlowTable
@@ -58,6 +73,15 @@ Resources:
         AllowMethods: "'GET,POST,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization'"
         AllowOrigin: "'*'"
+
+      # Protect the public demo API from accidental request floods.
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          MetricsEnabled: true
+          DataTraceEnabled: false
+          ThrottlingBurstLimit: 10
+          ThrottlingRateLimit: 5
 
 
   # ============================================================
@@ -141,6 +165,7 @@ Resources:
         InvariantCheckerFunctionArn: !GetAtt InvariantCheckerFunction.Arn
 
       Policies:
+
         - LambdaInvokePolicy:
             FunctionName: !Ref CreateOrderFunction
 
@@ -152,7 +177,7 @@ Resources:
 
         - LambdaInvokePolicy:
             FunctionName: !Ref ConfirmOrderFunction
-            
+
         - LambdaInvokePolicy:
             FunctionName: !Ref InvariantCheckerFunction
 
@@ -172,18 +197,19 @@ Resources:
           TABLE_NAME: !Ref CounterFlowTable
           STATE_MACHINE_ARN: !GetAtt CheckoutStateMachine.Arn
           INVARIANT_CHECKER_FUNCTION: !Ref InvariantCheckerFunction
+          DEMO_TOKEN: !Ref DemoToken
 
       Policies:
 
-        # Read trace data from DynamoDB
+        # Read execution trace data.
         - DynamoDBReadPolicy:
             TableName: !Ref CounterFlowTable
 
-        # Invoke the invariant checker
+        # Invoke deterministic invariant checker.
         - LambdaInvokePolicy:
             FunctionName: !Ref InvariantCheckerFunction
 
-        # Start and inspect Step Functions executions
+        # Start and inspect Step Functions executions.
         - Statement:
 
             - Effect: Allow
@@ -199,12 +225,21 @@ Resources:
 
       Events:
 
+        # --------------------------------------------------------
+        # POST /runs
+        # --------------------------------------------------------
+
         StartRun:
           Type: Api
           Properties:
             RestApiId: !Ref CounterFlowApi
             Path: /runs
             Method: POST
+
+
+        # --------------------------------------------------------
+        # GET /runs/{runId}
+        # --------------------------------------------------------
 
         GetRun:
           Type: Api
@@ -213,6 +248,11 @@ Resources:
             Path: /runs/{runId}
             Method: GET
 
+
+        # --------------------------------------------------------
+        # POST /runs/{runId}/compare
+        # --------------------------------------------------------
+
         CompareRun:
           Type: Api
           Properties:
@@ -220,12 +260,63 @@ Resources:
             Path: /runs/{runId}/compare
             Method: POST
 
+
+        # --------------------------------------------------------
+        # GET /runs/{runId}/trace
+        # --------------------------------------------------------
+
         GetRunTrace:
           Type: Api
           Properties:
-             RestApiId: !Ref CounterFlowApi
-             Path: /runs/{runId}/trace
-             Method: GET
+            RestApiId: !Ref CounterFlowApi
+            Path: /runs/{runId}/trace
+            Method: GET
+
+
+  # ============================================================
+  # CloudWatch Log Retention
+  # ============================================================
+
+  CreateOrderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CreateOrderFunction}"
+      RetentionInDays: 7
+
+
+  ReserveInventoryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ReserveInventoryFunction}"
+      RetentionInDays: 7
+
+
+  ChargePaymentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ChargePaymentFunction}"
+      RetentionInDays: 7
+
+
+  ConfirmOrderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ConfirmOrderFunction}"
+      RetentionInDays: 7
+
+
+  InvariantCheckerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${InvariantCheckerFunction}"
+      RetentionInDays: 7
+
+
+  ControlApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ControlApiFunction}"
+      RetentionInDays: 7
 
 
 # ==============================================================
@@ -236,12 +327,13 @@ Outputs:
 
   ApiUrl:
     Description: CounterFlow API Gateway URL
-    Value: !Sub >
-      https://${CounterFlowApi}.execute-api.${AWS::Region}.amazonaws.com/dev/
+    Value: !Sub "https://${CounterFlowApi}.execute-api.${AWS::Region}.amazonaws.com/dev/"
+
 
   TableName:
     Description: CounterFlow DynamoDB table
     Value: !Ref CounterFlowTable
+
 
   StateMachineArn:
     Description: Checkout Step Functions state machine

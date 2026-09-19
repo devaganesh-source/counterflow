@@ -72,6 +72,33 @@ export interface CompareRunResponse {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+const DEMO_TOKEN_KEY = "counterflow-demo-token";
+
+function getDemoToken(): string {
+  const existing = sessionStorage.getItem(
+    DEMO_TOKEN_KEY,
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  const entered = window.prompt(
+    "Enter the CounterFlow demo access token:",
+  );
+
+  const token = entered?.trim();
+
+  if (!token) {
+    throw new Error(
+      "A demo access token is required to start or compare runs.",
+    );
+  }
+  
+  sessionStorage.setItem(DEMO_TOKEN_KEY, token);
+  return token;
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -133,12 +160,15 @@ async function requestJson<T>(
 export async function startRun(
   workflowVersion: WorkflowVersion,
 ): Promise<RunResponse> {
+  const token = getDemoToken();
+  
   return requestJson<RunResponse>(
     `${API_BASE_URL}/runs`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-demo-token": token,
       },
       body: JSON.stringify({
         workflowVersion,
@@ -160,12 +190,15 @@ export async function compareRun(
   runId: string,
   clientRequestToken: string,
 ): Promise<CompareRunResponse> {
+  const token = getDemoToken();
+  
   return requestJson<CompareRunResponse>(
     `${API_BASE_URL}/runs/${runId}/compare`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-demo-token": token,
       },
       body: JSON.stringify({
         clientRequestToken,

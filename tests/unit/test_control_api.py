@@ -1001,3 +1001,75 @@ def test_compare_run_is_idempotent_for_same_client_token(
         fake_sf.start_calls[0]["name"]
         == fake_sf.start_calls[1]["name"]
     )
+
+
+# ============================================================
+# NEW AUTHORIZATION TESTS
+# ============================================================
+
+def test_post_requires_demo_token_when_configured(monkeypatch):
+    monkeypatch.setattr(
+        control_api,
+        "DEMO_TOKEN",
+        "test-demo-token-1234567890",
+    )
+
+    event = {
+        "httpMethod": "POST",
+        "path": "/runs",
+        "headers": {}, # Missing x-demo-token
+        "body": json.dumps(
+            {
+                "workflowVersion": "buggy",
+                "faultPlanId": "payment-ack-lost-v1",
+            }
+        ),
+    }
+
+    response = control_api.lambda_handler(event, None)
+
+    assert response["statusCode"] == 401
+    body = json.loads(response["body"])
+    assert body["message"] == "Unauthorized"
+
+
+def test_post_allows_request_with_valid_demo_token(monkeypatch):
+    monkeypatch.setattr(
+        control_api,
+        "DEMO_TOKEN",
+        "test-demo-token-1234567890",
+    )
+
+    # Mock stepfunctions so the test doesn't try to make real AWS calls 
+    # when authorization succeeds and start_run triggers.
+    class DummyStepFunctions:
+        def start_execution(self, **kwargs):
+            return {
+                "executionArn": "arn:aws:states:us-east-1:123456789012:execution:CheckoutStateMachine:test"
+            }
+
+    monkeypatch.setattr(
+        control_api,
+        "stepfunctions",
+        DummyStepFunctions(),
+    )
+
+    event = {
+        "httpMethod": "POST",
+        "path": "/runs",
+        "headers": {
+            "x-demo-token": "test-demo-token-1234567890"
+        },
+        "body": json.dumps(
+            {
+                "workflowVersion": "buggy",
+                "faultPlanId": "payment-ack-lost-v1",
+            }
+        ),
+    }
+
+    response = control_api.lambda_handler(event, None)
+
+    # 202 Accepted indicates successful authorization and execution 
+    # rather than a 401 rejection.
+    assert response["statusCode"] == 202
