@@ -120,7 +120,12 @@ function ResultPage() {
 
       if (!clientRequestToken) {
         clientRequestToken =
-          crypto.randomUUID();
+          crypto.randomUUID?.() ??
+          `${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2)}-${Math.random()
+            .toString(36)
+            .slice(2)}`;
 
         sessionStorage.setItem(
           tokenKey,
