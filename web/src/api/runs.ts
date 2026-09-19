@@ -91,10 +91,10 @@ function getDemoToken(): string {
 
   if (!token) {
     throw new Error(
-      "A demo access token is required to start or compare runs.",
+      "A demo access token is required to access CounterFlow runs.",
     );
   }
-  
+
   sessionStorage.setItem(DEMO_TOKEN_KEY, token);
   return token;
 }
@@ -161,7 +161,7 @@ export async function startRun(
   workflowVersion: WorkflowVersion,
 ): Promise<RunResponse> {
   const token = getDemoToken();
-  
+
   return requestJson<RunResponse>(
     `${API_BASE_URL}/runs`,
     {
@@ -181,8 +181,15 @@ export async function startRun(
 export async function getRun(
   runId: string,
 ): Promise<RunResponse> {
+  const token = getDemoToken();
+
   return requestJson<RunResponse>(
     `${API_BASE_URL}/runs/${runId}`,
+    {
+      headers: {
+        "x-demo-token": token,
+      },
+    },
   );
 }
 
@@ -191,7 +198,7 @@ export async function compareRun(
   clientRequestToken: string,
 ): Promise<CompareRunResponse> {
   const token = getDemoToken();
-  
+
   return requestJson<CompareRunResponse>(
     `${API_BASE_URL}/runs/${runId}/compare`,
     {

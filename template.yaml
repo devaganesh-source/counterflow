@@ -71,7 +71,7 @@ Resources:
 
       Cors:
         AllowMethods: "'GET,POST,OPTIONS'"
-        AllowHeaders: "'Content-Type,Authorization'"
+        AllowHeaders: "'Content-Type,Authorization,X-Demo-Token'"
         AllowOrigin: "'*'"
 
       # Protect the public demo API from accidental request floods.
