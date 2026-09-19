@@ -7,6 +7,8 @@ import {
 } from "../api/runs";
 import FaultPlanCard from "../components/FaultPlanCard";
 import InvariantResultCard from "../components/InvariantResultCard";
+import InvariantUnavailableCard from "../components/InvariantUnavailableCard";
+import RunStateBanner from "../components/RunStateBanner";
 import FirstFailingPrefix from "../components/FirstFailingPrefix";
 import TraceItem from "../components/TraceItem";
 
@@ -100,16 +102,65 @@ function ResultPage() {
         style={{
           padding: "40px",
           fontFamily: "Arial",
+          maxWidth: "760px",
+          margin: "auto",
         }}
       >
-        <h1>CounterFlow</h1>
+        <div
+          style={{
+            fontSize: "13px",
+            fontWeight: 800,
+            letterSpacing: "2px",
+            color: "#475569",
+          }}
+        >
+          COUNTERFLOW
+        </div>
 
-        <p style={{ color: "#b91c1c" }}>
-          {error}
-        </p>
+        <h1>Result unavailable</h1>
+
+        <section
+          style={{
+            marginTop: "24px",
+            padding: "24px",
+            borderRadius: "14px",
+            border: "2px solid #dc2626",
+            background: "#fff1f2",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "13px",
+              fontWeight: 800,
+              letterSpacing: "2px",
+              color: "#991b1b",
+            }}
+          >
+            REQUEST FAILED
+          </div>
+
+          <h2
+            style={{
+              color: "#b91c1c",
+              marginBottom: "8px",
+            }}
+          >
+            ✕ {error}
+          </h2>
+
+          <p style={{ marginBottom: 0 }}>
+            No resilience result or invariant conclusion
+            can be made for this request.
+          </p>
+        </section>
 
         <button
           onClick={() => navigate("/")}
+          style={{
+            marginTop: "20px",
+            padding: "10px 18px",
+            cursor: "pointer",
+          }}
         >
           Back to launcher
         </button>
@@ -123,13 +174,54 @@ function ResultPage() {
         style={{
           padding: "40px",
           fontFamily: "Arial",
+          maxWidth: "760px",
+          margin: "auto",
         }}
       >
-        <h1>CounterFlow</h1>
-        <p>Loading result...</p>
+        <div
+          style={{
+            fontSize: "13px",
+            fontWeight: 800,
+            letterSpacing: "2px",
+            color: "#475569",
+          }}
+        >
+          COUNTERFLOW
+        </div>
+
+        <h1>Loading result...</h1>
+
+        <section
+          style={{
+            marginTop: "24px",
+            padding: "22px",
+            borderRadius: "14px",
+            border: "2px solid #2563eb",
+            background: "#eff6ff",
+          }}
+        >
+          <strong
+            style={{
+              color: "#1d4ed8",
+            }}
+          >
+            RUNNING
+          </strong>
+
+          <p style={{ marginBottom: 0 }}>
+            Waiting for the latest execution state.
+            No invariant conclusion has been made yet.
+          </p>
+        </section>
       </main>
     );
   }
+
+  const executionFailed = [
+    "FAILED",
+    "TIMED_OUT",
+    "ABORTED",
+  ].includes(run.status);
 
   return (
     <main
@@ -172,9 +264,15 @@ function ResultPage() {
             background:
               run.status === "SUCCEEDED"
                 ? "#dcfce7"
-                : run.status === "FAILED"
+                : executionFailed
                   ? "#fee2e2"
-                  : "#e2e8f0",
+                  : "#dbeafe",
+            color:
+              run.status === "SUCCEEDED"
+                ? "#166534"
+                : executionFailed
+                  ? "#991b1b"
+                  : "#1d4ed8",
           }}
         >
           {run.status}
@@ -204,17 +302,23 @@ function ResultPage() {
 
       <hr />
 
+      <RunStateBanner status={run.status} />
+
       {run.faultPlan && (
         <FaultPlanCard
           faultPlan={run.faultPlan}
         />
       )}
 
-      {run.invariant && (
+      {run.invariant ? (
         <InvariantResultCard
           invariant={run.invariant}
           orderedChargeIds={orderedChargeIds}
           traces={run.traces ?? []}
+        />
+      ) : (
+        <InvariantUnavailableCard
+          executionStatus={run.status}
         />
       )}
 
@@ -249,6 +353,44 @@ function ResultPage() {
             />
           );
         })
+      )}
+
+      {executionFailed && (
+        <section
+          style={{
+            marginTop: "28px",
+            padding: "24px",
+            borderRadius: "14px",
+            border: "2px solid #dc2626",
+            background: "#fff1f2",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "13px",
+              fontWeight: 800,
+              letterSpacing: "2px",
+              color: "#991b1b",
+            }}
+          >
+            EXECUTION FAILURE
+          </div>
+
+          <h2
+            style={{
+              marginBottom: "8px",
+              color: "#b91c1c",
+            }}
+          >
+            ✕ Execution failed
+          </h2>
+
+          <p style={{ marginBottom: 0 }}>
+            This execution did not complete successfully.
+            It must not be interpreted as a passing
+            resilience result.
+          </p>
+        </section>
       )}
 
       {run.startDate && (

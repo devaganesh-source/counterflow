@@ -60,53 +60,94 @@ export interface RunResponse {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-export async function startRun(
-  workflowVersion: WorkflowVersion,
-): Promise<RunResponse> {
-  const response = await fetch(`${API_BASE_URL}/runs`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      workflowVersion,
-      faultPlanId: "payment-ack-lost-v1",
-    }),
-  });
+export class ApiError extends Error {
+  status: number;
 
-  const data = await response.json();
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
-  if (!response.ok) {
-    throw new Error(
-      data.message || "Failed to start resilience test",
+async function requestJson<T>(
+  url: string,
+  options?: RequestInit,
+): Promise<T> {
+  let response: Response;
+
+  try {
+    response = await fetch(url, options);
+  } catch {
+    throw new ApiError(
+      "CounterFlow API is unavailable. Please try again.",
+      0,
     );
   }
 
-  return data;
+  let data: unknown = null;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new ApiError(
+        "Run not found.",
+        404,
+      );
+    }
+
+    const message =
+      typeof data === "object" &&
+      data !== null &&
+      "message" in data &&
+      typeof data.message === "string"
+        ? data.message
+        : `Request failed with status ${response.status}`;
+
+    throw new ApiError(
+      message,
+      response.status,
+    );
+  }
+
+  return data as T;
+}
+
+export async function startRun(
+  workflowVersion: WorkflowVersion,
+): Promise<RunResponse> {
+  return requestJson<RunResponse>(
+    `${API_BASE_URL}/runs`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workflowVersion,
+        faultPlanId: "payment-ack-lost-v1",
+      }),
+    },
+  );
 }
 
 export async function getRun(
   runId: string,
 ): Promise<RunResponse> {
-  const response = await fetch(
+  return requestJson<RunResponse>(
     `${API_BASE_URL}/runs/${runId}`,
   );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(
-      data.message || "Failed to fetch run",
-    );
-  }
-
-  return data;
 }
 
 export async function compareRun(
   runId: string,
 ): Promise<RunResponse> {
-  const response = await fetch(
+  return requestJson<RunResponse>(
     `${API_BASE_URL}/runs/${runId}/compare`,
     {
       method: "POST",
@@ -115,14 +156,4 @@ export async function compareRun(
       },
     },
   );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(
-      data.message || "Failed to start comparison run",
-    );
-  }
-
-  return data;
 }
