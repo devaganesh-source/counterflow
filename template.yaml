@@ -10,16 +10,30 @@ Description: >
 # ============================================================
 
 Parameters:
+
   DemoToken:
     Type: String
-    Description: Token used for authenticating demo API requests.
+    Description: Token used for authenticating protected demo API requests.
     Default: ""
+    NoEcho: true
+
+  PublicDemoMode:
+    Type: String
+    Description: >
+      When true, the CounterFlow demo API can be used without a demo token.
+      Intended only for the constrained public hackathon demo environment.
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
 
 # ============================================================
 # Globals
 # ============================================================
 
 Globals:
+
   Function:
     Runtime: python3.12
     Timeout: 15
@@ -38,6 +52,7 @@ Resources:
 
   CounterFlowTable:
     Type: AWS::DynamoDB::Table
+
     Properties:
       BillingMode: PAY_PER_REQUEST
 
@@ -66,6 +81,7 @@ Resources:
 
   CounterFlowApi:
     Type: AWS::Serverless::Api
+
     Properties:
       StageName: dev
 
@@ -90,6 +106,7 @@ Resources:
 
   CreateOrderFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: .
       Handler: services.create_order.app.lambda_handler
@@ -101,6 +118,7 @@ Resources:
 
   ReserveInventoryFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: .
       Handler: services.reserve_inventory.app.lambda_handler
@@ -112,6 +130,7 @@ Resources:
 
   ChargePaymentFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: .
       Handler: services.charge_payment.app.lambda_handler
@@ -123,6 +142,7 @@ Resources:
 
   ConfirmOrderFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: .
       Handler: services.confirm_order.app.lambda_handler
@@ -138,6 +158,7 @@ Resources:
 
   InvariantCheckerFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: services/invariant_checker/
       Handler: app.lambda_handler
@@ -153,6 +174,7 @@ Resources:
 
   CheckoutStateMachine:
     Type: AWS::Serverless::StateMachine
+
     Properties:
 
       DefinitionUri: statemachines/checkout.asl.json
@@ -188,6 +210,7 @@ Resources:
 
   ControlApiFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: services/control_api/
       Handler: app.lambda_handler
@@ -198,6 +221,7 @@ Resources:
           STATE_MACHINE_ARN: !GetAtt CheckoutStateMachine.Arn
           INVARIANT_CHECKER_FUNCTION: !Ref InvariantCheckerFunction
           DEMO_TOKEN: !Ref DemoToken
+          PUBLIC_DEMO_MODE: !Ref PublicDemoMode
 
       Policies:
 
@@ -231,6 +255,7 @@ Resources:
 
         StartRun:
           Type: Api
+
           Properties:
             RestApiId: !Ref CounterFlowApi
             Path: /runs
@@ -243,6 +268,7 @@ Resources:
 
         GetRun:
           Type: Api
+
           Properties:
             RestApiId: !Ref CounterFlowApi
             Path: /runs/{runId}
@@ -255,6 +281,7 @@ Resources:
 
         CompareRun:
           Type: Api
+
           Properties:
             RestApiId: !Ref CounterFlowApi
             Path: /runs/{runId}/compare
@@ -267,6 +294,7 @@ Resources:
 
         GetRunTrace:
           Type: Api
+
           Properties:
             RestApiId: !Ref CounterFlowApi
             Path: /runs/{runId}/trace
@@ -279,6 +307,7 @@ Resources:
 
   CreateOrderLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${CreateOrderFunction}"
       RetentionInDays: 7
@@ -286,6 +315,7 @@ Resources:
 
   ReserveInventoryLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ReserveInventoryFunction}"
       RetentionInDays: 7
@@ -293,6 +323,7 @@ Resources:
 
   ChargePaymentLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ChargePaymentFunction}"
       RetentionInDays: 7
@@ -300,6 +331,7 @@ Resources:
 
   ConfirmOrderLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ConfirmOrderFunction}"
       RetentionInDays: 7
@@ -307,6 +339,7 @@ Resources:
 
   InvariantCheckerLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${InvariantCheckerFunction}"
       RetentionInDays: 7
@@ -314,14 +347,15 @@ Resources:
 
   ControlApiLogGroup:
     Type: AWS::Logs::LogGroup
+
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ControlApiFunction}"
       RetentionInDays: 7
 
 
-# ==============================================================
+# ============================================================
 # Outputs
-# ==============================================================
+# ============================================================
 
 Outputs:
 

@@ -16,7 +16,15 @@ lambda_client = boto3.client("lambda")
 TABLE_NAME = os.environ["TABLE_NAME"]
 STATE_MACHINE_ARN = os.environ["STATE_MACHINE_ARN"]
 INVARIANT_CHECKER_FUNCTION = os.environ["INVARIANT_CHECKER_FUNCTION"]
+
 DEMO_TOKEN = os.environ.get("DEMO_TOKEN", "")
+
+PUBLIC_DEMO_MODE = (
+    os.environ.get("PUBLIC_DEMO_MODE", "false")
+    .strip()
+    .lower()
+    in {"1", "true", "yes", "on"}
+)
 
 
 def json_default(value):
@@ -45,17 +53,39 @@ def api_response(status_code, body):
 
 def get_header(event, header_name):
     headers = event.get("headers") or {}
+
     for key, value in headers.items():
         if key.lower() == header_name.lower():
             return value
+
     return None
 
 
 def is_authorized(event):
-    if not DEMO_TOKEN:
+    """
+    Authorization behavior:
+
+    PUBLIC_DEMO_MODE=true
+        The deployed hackathon demo is publicly accessible.
+        No demo token is required.
+
+    PUBLIC_DEMO_MODE=false
+        Requests must provide the configured DEMO_TOKEN.
+
+    Protected mode fails closed if DEMO_TOKEN is missing.
+    """
+
+    if PUBLIC_DEMO_MODE:
         return True
 
-    token = get_header(event, "x-demo-token") or get_header(event, "authorization")
+    if not DEMO_TOKEN:
+        return False
+
+    token = (
+        get_header(event, "x-demo-token")
+        or get_header(event, "authorization")
+    )
+
     if token and token.startswith("Bearer "):
         token = token[7:].strip()
 
@@ -80,7 +110,10 @@ def calculate_fault_plan_hash(fault_plan):
         sort_keys=True,
         separators=(",", ":"),
     )
-    return hashlib.sha256(canonical_plan.encode("utf-8")).hexdigest()
+
+    return hashlib.sha256(
+        canonical_plan.encode("utf-8")
+    ).hexdigest()
 
 
 def start_run(event):
@@ -100,6 +133,7 @@ def start_run(event):
         body = raw_body
 
     workflow_version = body.get("workflowVersion")
+
     if workflow_version not in {"buggy", "fixed"}:
         return api_response(
             400,
@@ -131,7 +165,8 @@ def start_run(event):
             400,
             {
                 "message": (
-                    f"Invalid faultPlanId '{fault_plan_id}'. Must be a known allowlisted enum."
+                    f"Invalid faultPlanId '{fault_plan_id}'. "
+                    "Must be a known allowlisted enum."
                 )
             },
         )
@@ -148,7 +183,9 @@ def start_run(event):
 
     workflow_input["faultPlanId"] = fault_plan_id
     workflow_input["faultPlan"] = fault_plan
-    workflow_input["faultPlanHash"] = calculate_fault_plan_hash(fault_plan)
+    workflow_input["faultPlanHash"] = calculate_fault_plan_hash(
+        fault_plan
+    )
 
     execution = stepfunctions.start_execution(
         stateMachineArn=STATE_MACHINE_ARN,
@@ -183,6 +220,7 @@ def compare_run(event):
         )
 
     raw_body = event.get("body") or "{}"
+
     if isinstance(raw_body, str):
         try:
             body = json.loads(raw_body)
@@ -214,14 +252,38 @@ def compare_run(event):
 
         raise
 
-    source_input = json.loads(execution.get("input") or "{}")
+    source_input = json.loads(
+        execution.get("input") or "{}"
+    )
 
     if client_token:
         # Generate deterministic UUIDs if a token is provided
-        namespace = uuid.uuid5(uuid.NAMESPACE_DNS, f"{source_run_id}-{client_token}")
-        run_id = str(uuid.uuid5(namespace, "run"))
-        order_id = str(uuid.uuid5(namespace, "order"))
-        event_id = str(uuid.uuid5(namespace, "event"))
+        namespace = uuid.uuid5(
+            uuid.NAMESPACE_DNS,
+            f"{source_run_id}-{client_token}",
+        )
+
+        run_id = str(
+            uuid.uuid5(
+                namespace,
+                "run",
+            )
+        )
+
+        order_id = str(
+            uuid.uuid5(
+                namespace,
+                "order",
+            )
+        )
+
+        event_id = str(
+            uuid.uuid5(
+                namespace,
+                "event",
+            )
+        )
+
     else:
         run_id = str(uuid.uuid4())
         order_id = str(uuid.uuid4())
@@ -233,24 +295,43 @@ def compare_run(event):
         "eventId": event_id,
         # Force the workflow version to fixed
         "workflowVersion": "fixed",
-        "sku": source_input.get("sku", "SKU-001"),
+        "sku": source_input.get(
+            "sku",
+            "SKU-001",
+        ),
     }
 
-    # Copy the exact fault plan object and ID 
+    # Copy the exact fault plan object and ID
     # from the original execution to ensure parity.
     if "faultPlanId" in source_input:
-        workflow_input["faultPlanId"] = source_input["faultPlanId"]
+        workflow_input["faultPlanId"] = (
+            source_input["faultPlanId"]
+        )
 
     if "faultPlan" in source_input:
-        workflow_input["faultPlan"] = source_input["faultPlan"]
+        workflow_input["faultPlan"] = (
+            source_input["faultPlan"]
+        )
 
     fault_plan_hash = None
+
     if "faultPlanHash" in source_input:
-        fault_plan_hash = source_input["faultPlanHash"]
-        workflow_input["faultPlanHash"] = fault_plan_hash
+        fault_plan_hash = (
+            source_input["faultPlanHash"]
+        )
+
+        workflow_input["faultPlanHash"] = (
+            fault_plan_hash
+        )
+
     elif "faultPlan" in workflow_input:
-        fault_plan_hash = calculate_fault_plan_hash(workflow_input["faultPlan"])
-        workflow_input["faultPlanHash"] = fault_plan_hash
+        fault_plan_hash = calculate_fault_plan_hash(
+            workflow_input["faultPlan"]
+        )
+
+        workflow_input["faultPlanHash"] = (
+            fault_plan_hash
+        )
 
     new_execution_arn = get_execution_arn(run_id)
 
@@ -260,8 +341,14 @@ def compare_run(event):
             name=run_id,
             input=json.dumps(workflow_input),
         )
+
     except ClientError as error:
-        error_code = error.response.get("Error", {}).get("Code")
+        error_code = (
+            error.response
+            .get("Error", {})
+            .get("Code")
+        )
+
         if error_code != "ExecutionAlreadyExists":
             raise
 
@@ -277,7 +364,9 @@ def compare_run(event):
     }
 
     if fault_plan_hash is not None:
-        response_payload["faultPlanHash"] = fault_plan_hash
+        response_payload["faultPlanHash"] = (
+            fault_plan_hash
+        )
 
     return api_response(
         202,
@@ -333,7 +422,9 @@ def build_fault_plan_info(execution_input):
 
     fault = faults[0]
 
-    plan_hash = calculate_fault_plan_hash(fault_plan)
+    plan_hash = calculate_fault_plan_hash(
+        fault_plan
+    )
 
     fault_plan_id = execution_input.get(
         "faultPlanId",
@@ -359,21 +450,29 @@ def build_trace_analysis(invariant):
     if not invariant:
         return None
 
-    first_failing_sequence = invariant.get("firstFailingSequence")
+    first_failing_sequence = invariant.get(
+        "firstFailingSequence"
+    )
 
     if first_failing_sequence is None:
         return None
 
     return {
         "firstFailingSequence": first_failing_sequence,
-        "firstFailingOperation": invariant.get("firstFailingOperation"),
-        "firstFailingComponent": invariant.get("firstFailingComponent"),
+        "firstFailingOperation": invariant.get(
+            "firstFailingOperation"
+        ),
+        "firstFailingComponent": invariant.get(
+            "firstFailingComponent"
+        ),
         "reason": invariant.get("reason"),
     }
 
 
 def get_trace(event):
-    path_parameters = event.get("pathParameters") or {}
+    path_parameters = event.get(
+        "pathParameters"
+    ) or {}
 
     run_id = path_parameters.get("runId")
 
@@ -389,8 +488,12 @@ def get_trace(event):
 
     trace_result = table.query(
         KeyConditionExpression=(
-            Key("PK").eq(f"RUN#{run_id}")
-            & Key("SK").begins_with("TRACE#")
+            Key("PK").eq(
+                f"RUN#{run_id}"
+            )
+            & Key("SK").begins_with(
+                "TRACE#"
+            )
         )
     )
 
@@ -409,7 +512,9 @@ def get_trace(event):
 
 
 def get_run(event):
-    path_parameters = event.get("pathParameters") or {}
+    path_parameters = event.get(
+        "pathParameters"
+    ) or {}
 
     run_id = path_parameters.get("runId")
 
@@ -421,7 +526,9 @@ def get_run(event):
             },
         )
 
-    execution_arn = get_execution_arn(run_id)
+    execution_arn = get_execution_arn(
+        run_id
+    )
 
     try:
         execution = stepfunctions.describe_execution(
@@ -429,7 +536,9 @@ def get_run(event):
         )
 
     except ClientError as error:
-        error_code = error.response["Error"]["Code"]
+        error_code = (
+            error.response["Error"]["Code"]
+        )
 
         if error_code == "ExecutionDoesNotExist":
             return api_response(
@@ -446,8 +555,12 @@ def get_run(event):
 
     trace_result = table.query(
         KeyConditionExpression=(
-            Key("PK").eq(f"RUN#{run_id}")
-            & Key("SK").begins_with("TRACE#")
+            Key("PK").eq(
+                f"RUN#{run_id}"
+            )
+            & Key("SK").begins_with(
+                "TRACE#"
+            )
         )
     )
 
@@ -460,7 +573,9 @@ def get_run(event):
         execution.get("input") or "{}"
     )
 
-    fault_plan_info = build_fault_plan_info(execution_input)
+    fault_plan_info = build_fault_plan_info(
+        execution_input
+    )
 
     invariant = None
     trace_analysis = None
@@ -473,7 +588,9 @@ def get_run(event):
     }
 
     if execution["status"] in terminal_statuses:
-        order_id = execution_input.get("orderId")
+        order_id = execution_input.get(
+            "orderId"
+        )
 
         if order_id:
             invariant = run_invariant_checker(
@@ -481,13 +598,17 @@ def get_run(event):
                 order_id,
             )
 
-            trace_analysis = build_trace_analysis(invariant)
+            trace_analysis = build_trace_analysis(
+                invariant
+            )
 
     result = {
         "runId": run_id,
         "status": execution["status"],
         "statusUrl": f"/runs/{run_id}",
-        "startDate": execution["startDate"].isoformat(),
+        "startDate": execution[
+            "startDate"
+        ].isoformat(),
         "traces": traces,
         "invariant": invariant,
         "faultPlan": fault_plan_info,
@@ -495,13 +616,19 @@ def get_run(event):
     }
 
     if execution.get("stopDate"):
-        result["stopDate"] = execution["stopDate"].isoformat()
+        result["stopDate"] = execution[
+            "stopDate"
+        ].isoformat()
 
     if execution.get("output"):
         try:
-            result["output"] = json.loads(execution["output"])
+            result["output"] = json.loads(
+                execution["output"]
+            )
         except json.JSONDecodeError:
-            result["output"] = execution["output"]
+            result["output"] = (
+                execution["output"]
+            )
 
     return api_response(
         200,
@@ -517,7 +644,12 @@ def lambda_handler(event, context):
         )
 
         if method == "OPTIONS":
-            return api_response(200, {"message": "OK"})
+            return api_response(
+                200,
+                {
+                    "message": "OK"
+                },
+            )
 
         if not is_authorized(event):
             return api_response(
@@ -527,28 +659,47 @@ def lambda_handler(event, context):
                 },
             )
 
-        resource = event.get("resource", "")
-        path = event.get("path", "")
+        resource = event.get(
+            "resource",
+            "",
+        )
+
+        path = event.get(
+            "path",
+            "",
+        )
 
         if method == "POST":
-            if resource.endswith("/compare") or path.endswith("/compare"):
+            if (
+                resource.endswith("/compare")
+                or path.endswith("/compare")
+            ):
                 return compare_run(event)
+
             return start_run(event)
 
         if method == "GET":
-            if resource.endswith("/trace") or path.endswith("/trace"):
+            if (
+                resource.endswith("/trace")
+                or path.endswith("/trace")
+            ):
                 return get_trace(event)
+
             return get_run(event)
 
         return api_response(
             405,
             {
-                "message": f"Method {method} not allowed"
+                "message": (
+                    f"Method {method} not allowed"
+                )
             },
         )
 
     except Exception as error:
-        print(f"ERROR: {str(error)}")
+        print(
+            f"ERROR: {str(error)}"
+        )
 
         return api_response(
             500,

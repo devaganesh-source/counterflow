@@ -1,26 +1,55 @@
 import os
 import json
 from datetime import datetime, timezone
+
 from botocore.exceptions import ClientError
+
+
+# ============================================================
+# Test environment
+# ============================================================
 
 os.environ.setdefault(
     "STATE_MACHINE_ARN",
-    "arn:aws:states:us-east-1:123456789012:stateMachine:CheckoutStateMachine",
+    (
+        "arn:aws:states:us-east-1:"
+        "123456789012:"
+        "stateMachine:"
+        "CheckoutStateMachine"
+    ),
 )
+
 os.environ.setdefault(
     "TABLE_NAME",
     "counterflow-test-table",
 )
+
 os.environ.setdefault(
     "INVARIANT_CHECKER_FUNCTION",
     "counterflow-test-invariant-checker",
 )
 
+# Most tests in this file validate API contracts rather than
+# authentication behavior. Run those tests in public demo mode.
+# Authentication-specific tests override this value explicitly.
+os.environ.setdefault(
+    "PUBLIC_DEMO_MODE",
+    "true",
+)
+
+
 from services.control_api import app as control_api
 
 
+# ============================================================
+# Fake AWS dependencies
+# ============================================================
+
 class FakeStepFunctions:
-    def describe_execution(self, executionArn):
+    def describe_execution(
+        self,
+        executionArn,
+    ):
         return {
             "executionArn": executionArn,
             "status": "SUCCEEDED",
@@ -53,8 +82,9 @@ class FakeStepFunctions:
                         "workflowVersion": "buggy",
                         "faults": [
                             {
-                                "type":
-                                    "AFTER_SIDE_EFFECT_TIMEOUT",
+                                "type": (
+                                    "AFTER_SIDE_EFFECT_TIMEOUT"
+                                ),
                                 "target": "ChargePayment",
                                 "attempt": 1,
                             }
@@ -73,7 +103,10 @@ class FakeStepFunctions:
 
 
 class FakeTable:
-    def query(self, **kwargs):
+    def query(
+        self,
+        **kwargs,
+    ):
         return {
             "Items": [
                 {
@@ -113,11 +146,20 @@ class FakeTable:
 
 
 class FakeDynamoDB:
-    def Table(self, table_name):
+    def Table(
+        self,
+        table_name,
+    ):
         return FakeTable()
 
 
-def test_get_run_exposes_frontend_contract(monkeypatch):
+# ============================================================
+# GET /runs/{runId} contract tests
+# ============================================================
+
+def test_get_run_exposes_frontend_contract(
+    monkeypatch,
+):
     invariant = {
         "invariantId": "charge-at-most-once",
         "name": "ChargeAtMostOnce",
@@ -156,7 +198,6 @@ def test_get_run_exposes_frontend_contract(monkeypatch):
         FakeDynamoDB(),
     )
 
-    # Avoid depending on the real state machine ARN.
     monkeypatch.setattr(
         control_api,
         "get_execution_arn",
@@ -167,8 +208,6 @@ def test_get_run_exposes_frontend_contract(monkeypatch):
         ),
     )
 
-    # This test verifies the Control API contract,
-    # not Lambda-to-Lambda invocation itself.
     monkeypatch.setattr(
         control_api,
         "run_invariant_checker",
@@ -189,11 +228,14 @@ def test_get_run_exposes_frontend_contract(monkeypatch):
 
     assert response["statusCode"] == 200
 
-    body = json.loads(response["body"])
+    body = json.loads(
+        response["body"]
+    )
 
     # Core run contract.
     assert body["runId"] == "run_contract_001"
     assert body["status"] == "SUCCEEDED"
+
     assert body["statusUrl"] == (
         "/runs/run_contract_001"
     )
@@ -205,7 +247,9 @@ def test_get_run_exposes_frontend_contract(monkeypatch):
     assert "traceAnalysis" in body
 
     # Trace contract.
-    assert len(body["traces"]) == 2
+    assert len(
+        body["traces"]
+    ) == 2
 
     assert (
         body["traces"][0]["operation"]
@@ -250,10 +294,13 @@ def test_get_run_exposes_frontend_contract(monkeypatch):
         == 999
     )
 
-    assert returned_invariant["chargeIds"] == [
-        "charge_1",
-        "charge_2",
-    ]
+    assert (
+        returned_invariant["chargeIds"]
+        == [
+            "charge_1",
+            "charge_2",
+        ]
+    )
 
     # Backend-determined failing prefix.
     trace_analysis = body["traceAnalysis"]
@@ -294,20 +341,38 @@ def test_get_run_exposes_frontend_contract(monkeypatch):
     assert fault_plan["attempt"] == 1
 
     # Execution output is preserved too.
-    assert body["output"]["status"] == "CONFIRMED"
+    assert (
+        body["output"]["status"]
+        == "CONFIRMED"
+    )
 
 
-def test_get_run_exposes_fixed_success_contract(monkeypatch):
+def test_get_run_exposes_fixed_success_contract(
+    monkeypatch,
+):
     class FixedStepFunctions:
-        def describe_execution(self, executionArn):
+        def describe_execution(
+            self,
+            executionArn,
+        ):
             return {
                 "executionArn": executionArn,
                 "status": "SUCCEEDED",
                 "startDate": datetime(
-                    2026, 9, 19, 3, 10, tzinfo=timezone.utc
+                    2026,
+                    9,
+                    19,
+                    3,
+                    10,
+                    tzinfo=timezone.utc,
                 ),
                 "stopDate": datetime(
-                    2026, 9, 19, 3, 11, tzinfo=timezone.utc
+                    2026,
+                    9,
+                    19,
+                    3,
+                    11,
+                    tzinfo=timezone.utc,
                 ),
                 "input": json.dumps(
                     {
@@ -322,7 +387,9 @@ def test_get_run_exposes_fixed_success_contract(monkeypatch):
                             "workflowVersion": "fixed",
                             "faults": [
                                 {
-                                    "type": "AFTER_SIDE_EFFECT_TIMEOUT",
+                                    "type": (
+                                        "AFTER_SIDE_EFFECT_TIMEOUT"
+                                    ),
                                     "target": "ChargePayment",
                                     "attempt": 1,
                                 }
@@ -340,7 +407,10 @@ def test_get_run_exposes_fixed_success_contract(monkeypatch):
             }
 
     class FixedTable:
-        def query(self, **kwargs):
+        def query(
+            self,
+            **kwargs,
+        ):
             return {
                 "Items": [
                     {
@@ -355,7 +425,9 @@ def test_get_run_exposes_fixed_success_contract(monkeypatch):
                         "phase": "SIDE_EFFECT_COMMITTED",
                         "outcome": "SUCCESS",
                         "evidence": {
-                            "chargeId": "charge_order_fixed_001",
+                            "chargeId": (
+                                "charge_order_fixed_001"
+                            ),
                             "amount": 999,
                         },
                     },
@@ -371,7 +443,9 @@ def test_get_run_exposes_fixed_success_contract(monkeypatch):
                         "phase": "ATTEMPT_SUCCEEDED",
                         "outcome": "SUCCESS",
                         "evidence": {
-                            "chargeId": "charge_order_fixed_001",
+                            "chargeId": (
+                                "charge_order_fixed_001"
+                            ),
                             "idempotentReplay": True,
                         },
                     },
@@ -379,7 +453,10 @@ def test_get_run_exposes_fixed_success_contract(monkeypatch):
             }
 
     class FixedDynamoDB:
-        def Table(self, table_name):
+        def Table(
+            self,
+            table_name,
+        ):
             return FixedTable()
 
     invariant = {
@@ -398,7 +475,9 @@ def test_get_run_exposes_fixed_success_contract(monkeypatch):
         "expectedAmount": 999,
         "actualCharged": 999,
         "overcharge": 0,
-        "chargeIds": ["charge_order_fixed_001"],
+        "chargeIds": [
+            "charge_order_fixed_001"
+        ],
     }
 
     monkeypatch.setattr(
@@ -443,44 +522,123 @@ def test_get_run_exposes_fixed_success_contract(monkeypatch):
 
     assert response["statusCode"] == 200
 
-    body = json.loads(response["body"])
+    body = json.loads(
+        response["body"]
+    )
 
-    assert body["runId"] == "run_fixed_001"
-    assert body["status"] == "SUCCEEDED"
-    
-    assert len(body["traces"]) == 2
-    assert body["traces"][0]["operation"] == "PaymentCharged"
-    assert body["traces"][1]["operation"] == "PaymentReused"
+    assert (
+        body["runId"]
+        == "run_fixed_001"
+    )
+
+    assert (
+        body["status"]
+        == "SUCCEEDED"
+    )
+
+    assert len(
+        body["traces"]
+    ) == 2
+
+    assert (
+        body["traces"][0]["operation"]
+        == "PaymentCharged"
+    )
+
+    assert (
+        body["traces"][1]["operation"]
+        == "PaymentReused"
+    )
 
     returned_invariant = body["invariant"]
-    assert returned_invariant["status"] == "PASSED"
-    assert returned_invariant["expectedChargeCount"] == 1
-    assert returned_invariant["actualChargeCount"] == 1
-    assert returned_invariant["expectedAmount"] == 999
-    assert returned_invariant["actualCharged"] == 999
-    assert returned_invariant["overcharge"] == 0
-    assert returned_invariant["chargeIds"] == ["charge_order_fixed_001"]
 
-    assert body["traceAnalysis"] is None
+    assert (
+        returned_invariant["status"]
+        == "PASSED"
+    )
+
+    assert (
+        returned_invariant["expectedChargeCount"]
+        == 1
+    )
+
+    assert (
+        returned_invariant["actualChargeCount"]
+        == 1
+    )
+
+    assert (
+        returned_invariant["expectedAmount"]
+        == 999
+    )
+
+    assert (
+        returned_invariant["actualCharged"]
+        == 999
+    )
+
+    assert (
+        returned_invariant["overcharge"]
+        == 0
+    )
+
+    assert (
+        returned_invariant["chargeIds"]
+        == [
+            "charge_order_fixed_001"
+        ]
+    )
+
+    assert (
+        body["traceAnalysis"]
+        is None
+    )
 
     fault_plan = body["faultPlan"]
-    assert fault_plan["type"] == "AFTER_SIDE_EFFECT_TIMEOUT"
-    assert fault_plan["target"] == "ChargePayment"
-    assert fault_plan["attempt"] == 1
 
-    assert body["output"]["status"] == "CONFIRMED"
+    assert (
+        fault_plan["type"]
+        == "AFTER_SIDE_EFFECT_TIMEOUT"
+    )
 
+    assert (
+        fault_plan["target"]
+        == "ChargePayment"
+    )
+
+    assert (
+        fault_plan["attempt"]
+        == 1
+    )
+
+    assert (
+        body["output"]["status"]
+        == "CONFIRMED"
+    )
+
+
+# ============================================================
+# POST /runs contract tests
+# ============================================================
 
 class RecordingStepFunctions:
     def __init__(self):
         self.calls = []
 
-    def start_execution(self, **kwargs):
-        self.calls.append(kwargs)
+    def start_execution(
+        self,
+        **kwargs,
+    ):
+        self.calls.append(
+            kwargs
+        )
+
         return {
             "executionArn": (
-                "arn:aws:states:us-east-1:"
-                "123456789012:execution:"
+                "arn:aws:states:"
+                "us-east-1:"
+                "123456789012:"
+                "execution:"
                 "CheckoutStateMachine:"
                 f"{kwargs['name']}"
             )
@@ -493,6 +651,7 @@ def run_post_contract_test(
     suffix,
 ):
     recorder = RecordingStepFunctions()
+
     monkeypatch.setattr(
         control_api,
         "stepfunctions",
@@ -506,10 +665,13 @@ def run_post_contract_test(
             f"event_{suffix}",
         ]
     )
+
     monkeypatch.setattr(
         control_api.uuid,
         "uuid4",
-        lambda: next(generated_ids),
+        lambda: next(
+            generated_ids
+        ),
     )
 
     event = {
@@ -527,25 +689,55 @@ def run_post_contract_test(
         None,
     )
 
-    assert response["statusCode"] == 202
-    body = json.loads(response["body"])
-
-    assert body["runId"] == f"run_{suffix}"
-    assert body["orderId"] == f"order_{suffix}"
-    assert body["eventId"] == f"event_{suffix}"
-    assert body["status"] == "RUNNING"
-    assert body["statusUrl"] == (
-        f"/runs/run_{suffix}"
+    assert (
+        response["statusCode"]
+        == 202
     )
 
-    assert len(recorder.calls) == 1
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["runId"]
+        == f"run_{suffix}"
+    )
+
+    assert (
+        body["orderId"]
+        == f"order_{suffix}"
+    )
+
+    assert (
+        body["eventId"]
+        == f"event_{suffix}"
+    )
+
+    assert (
+        body["status"]
+        == "RUNNING"
+    )
+
+    assert (
+        body["statusUrl"]
+        == f"/runs/run_{suffix}"
+    )
+
+    assert len(
+        recorder.calls
+    ) == 1
+
     call = recorder.calls[0]
 
     assert (
         call["stateMachineArn"]
         == control_api.STATE_MACHINE_ARN
     )
-    assert call["name"] == f"run_{suffix}"
+
+    assert (
+        call["name"]
+        == f"run_{suffix}"
+    )
 
     workflow_input = json.loads(
         call["input"]
@@ -555,24 +747,32 @@ def run_post_contract_test(
         workflow_input["runId"]
         == f"run_{suffix}"
     )
+
     assert (
         workflow_input["orderId"]
         == f"order_{suffix}"
     )
+
     assert (
         workflow_input["eventId"]
         == f"event_{suffix}"
     )
+
     assert (
         workflow_input["workflowVersion"]
         == workflow_version
     )
+
     assert (
         workflow_input["faultPlanId"]
         == "payment-ack-lost-v1"
     )
-    assert workflow_input["sku"] == "SKU-001"
-    
+
+    assert (
+        workflow_input["sku"]
+        == "SKU-001"
+    )
+
     expected_fault_plan = {
         "faults": [
             {
@@ -582,7 +782,12 @@ def run_post_contract_test(
             }
         ]
     }
-    assert workflow_input["faultPlan"] == expected_fault_plan
+
+    assert (
+        workflow_input["faultPlan"]
+        == expected_fault_plan
+    )
+
     assert (
         workflow_input["faultPlanHash"]
         == control_api.calculate_fault_plan_hash(
@@ -591,7 +796,9 @@ def run_post_contract_test(
     )
 
 
-def test_post_runs_starts_buggy_workflow(monkeypatch):
+def test_post_runs_starts_buggy_workflow(
+    monkeypatch,
+):
     run_post_contract_test(
         monkeypatch,
         workflow_version="buggy",
@@ -599,7 +806,9 @@ def test_post_runs_starts_buggy_workflow(monkeypatch):
     )
 
 
-def test_post_runs_starts_fixed_workflow(monkeypatch):
+def test_post_runs_starts_fixed_workflow(
+    monkeypatch,
+):
     run_post_contract_test(
         monkeypatch,
         workflow_version="fixed",
@@ -612,14 +821,24 @@ def test_post_runs_rejects_invalid_json():
         "httpMethod": "POST",
         "body": "{not-valid-json",
     }
+
     response = control_api.lambda_handler(
         event,
         None,
     )
-    assert response["statusCode"] == 400
-    body = json.loads(response["body"])
-    assert body["message"] == (
-        "Request body must be valid JSON"
+
+    assert (
+        response["statusCode"]
+        == 400
+    )
+
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["message"]
+        == "Request body must be valid JSON"
     )
 
 
@@ -632,14 +851,24 @@ def test_post_runs_rejects_missing_workflow_version():
             }
         ),
     }
+
     response = control_api.lambda_handler(
         event,
         None,
     )
-    assert response["statusCode"] == 400
-    body = json.loads(response["body"])
-    assert body["message"] == (
-        "workflowVersion must be buggy or fixed"
+
+    assert (
+        response["statusCode"]
+        == 400
+    )
+
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["message"]
+        == "workflowVersion must be buggy or fixed"
     )
 
 
@@ -653,14 +882,24 @@ def test_post_runs_rejects_invalid_workflow_version():
             }
         ),
     }
+
     response = control_api.lambda_handler(
         event,
         None,
     )
-    assert response["statusCode"] == 400
-    body = json.loads(response["body"])
-    assert body["message"] == (
-        "workflowVersion must be buggy or fixed"
+
+    assert (
+        response["statusCode"]
+        == 400
+    )
+
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["message"]
+        == "workflowVersion must be buggy or fixed"
     )
 
 
@@ -669,29 +908,41 @@ def test_get_run_rejects_missing_run_id():
         "httpMethod": "GET",
         "pathParameters": {},
     }
+
     response = control_api.lambda_handler(
         event,
         None,
     )
-    assert response["statusCode"] == 400
+
+    assert (
+        response["statusCode"]
+        == 400
+    )
 
 
 def test_api_rejects_unsupported_method():
     event = {
         "httpMethod": "DELETE",
     }
+
     response = control_api.lambda_handler(
         event,
         None,
     )
-    assert response["statusCode"] == 405
+
+    assert (
+        response["statusCode"]
+        == 405
+    )
 
 
 # ============================================================
-# NEW COMPARE ROUTE TESTS
+# Compare route tests
 # ============================================================
 
-def test_compare_run_copies_exact_fault_plan(monkeypatch):
+def test_compare_run_copies_exact_fault_plan(
+    monkeypatch,
+):
     source_fault_plan = {
         "faults": [
             {
@@ -701,104 +952,264 @@ def test_compare_run_copies_exact_fault_plan(monkeypatch):
             }
         ]
     }
-    
-    source_hash = control_api.calculate_fault_plan_hash(source_fault_plan)
+
+    source_hash = (
+        control_api.calculate_fault_plan_hash(
+            source_fault_plan
+        )
+    )
 
     class CompareStepFunctions:
         def __init__(self):
             self.start_calls = []
 
-        def describe_execution(self, executionArn):
+        def describe_execution(
+            self,
+            executionArn,
+        ):
             return {
                 "executionArn": executionArn,
-                "input": json.dumps({
-                    "runId": "source_run_001",
-                    "orderId": "source_order_001",
-                    "workflowVersion": "buggy",
-                    "sku": "SKU-999",
-                    "faultPlanId": "payment-ack-lost-v1",
-                    "faultPlan": source_fault_plan
-                })
+                "input": json.dumps(
+                    {
+                        "runId": "source_run_001",
+                        "orderId": "source_order_001",
+                        "workflowVersion": "buggy",
+                        "sku": "SKU-999",
+                        "faultPlanId": (
+                            "payment-ack-lost-v1"
+                        ),
+                        "faultPlan": (
+                            source_fault_plan
+                        ),
+                    }
+                ),
             }
 
-        def start_execution(self, **kwargs):
-            self.start_calls.append(kwargs)
+        def start_execution(
+            self,
+            **kwargs,
+        ):
+            self.start_calls.append(
+                kwargs
+            )
+
             return {
                 "executionArn": (
-                    "arn:aws:states:us-east-1:123456789012:execution:"
-                    f"CheckoutStateMachine:{kwargs['name']}"
+                    "arn:aws:states:"
+                    "us-east-1:"
+                    "123456789012:"
+                    "execution:"
+                    "CheckoutStateMachine:"
+                    f"{kwargs['name']}"
                 )
             }
 
-    recorder = CompareStepFunctions()
-    monkeypatch.setattr(control_api, "stepfunctions", recorder)
+    recorder = (
+        CompareStepFunctions()
+    )
 
-    generated_ids = iter(["run_cmp_001", "order_cmp_001", "evt_cmp_001"])
-    monkeypatch.setattr(control_api.uuid, "uuid4", lambda: next(generated_ids))
+    monkeypatch.setattr(
+        control_api,
+        "stepfunctions",
+        recorder,
+    )
+
+    generated_ids = iter(
+        [
+            "run_cmp_001",
+            "order_cmp_001",
+            "evt_cmp_001",
+        ]
+    )
+
+    monkeypatch.setattr(
+        control_api.uuid,
+        "uuid4",
+        lambda: next(
+            generated_ids
+        ),
+    )
 
     event = {
         "httpMethod": "POST",
-        "resource": "/runs/{runId}/compare",
-        "pathParameters": {"runId": "source_run_001"}
+        "resource": (
+            "/runs/{runId}/compare"
+        ),
+        "pathParameters": {
+            "runId": "source_run_001"
+        },
     }
 
-    response = control_api.lambda_handler(event, None)
-    
-    assert response["statusCode"] == 202
-    body = json.loads(response["body"])
-    
-    assert body["sourceRunId"] == "source_run_001"
-    assert body["runId"] == "run_cmp_001"
-    assert body["workflowVersion"] == "fixed"
-    assert body["statusUrl"] == "/runs/run_cmp_001"
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
 
-    # Verify the workflow input was copied correctly and forced to 'fixed'
-    assert len(recorder.start_calls) == 1
-    new_input = json.loads(recorder.start_calls[0]["input"])
-    
-    assert new_input["runId"] == "run_cmp_001"
-    assert new_input["orderId"] == "order_cmp_001"
-    assert new_input["workflowVersion"] == "fixed"
-    assert new_input["sku"] == "SKU-999"
-    assert new_input["faultPlanId"] == "payment-ack-lost-v1"
-    
-    # Assert the fault plan was copied exactly and the hash matches
-    new_hash = control_api.calculate_fault_plan_hash(new_input["faultPlan"])
-    assert new_hash == source_hash
+    assert (
+        response["statusCode"]
+        == 202
+    )
+
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["sourceRunId"]
+        == "source_run_001"
+    )
+
+    assert (
+        body["runId"]
+        == "run_cmp_001"
+    )
+
+    assert (
+        body["workflowVersion"]
+        == "fixed"
+    )
+
+    assert (
+        body["statusUrl"]
+        == "/runs/run_cmp_001"
+    )
+
+    # Verify the workflow input was copied correctly
+    # and the version was forced to fixed.
+    assert len(
+        recorder.start_calls
+    ) == 1
+
+    new_input = json.loads(
+        recorder.start_calls[0]["input"]
+    )
+
+    assert (
+        new_input["runId"]
+        == "run_cmp_001"
+    )
+
+    assert (
+        new_input["orderId"]
+        == "order_cmp_001"
+    )
+
+    assert (
+        new_input["workflowVersion"]
+        == "fixed"
+    )
+
+    assert (
+        new_input["sku"]
+        == "SKU-999"
+    )
+
+    assert (
+        new_input["faultPlanId"]
+        == "payment-ack-lost-v1"
+    )
+
+    # Assert exact fault-plan parity.
+    new_hash = (
+        control_api.calculate_fault_plan_hash(
+            new_input["faultPlan"]
+        )
+    )
+
+    assert (
+        new_hash
+        == source_hash
+    )
 
 
 def test_compare_run_rejects_missing_run_id():
     event = {
         "httpMethod": "POST",
-        "resource": "/runs/{runId}/compare",
-        "pathParameters": {}
+        "resource": (
+            "/runs/{runId}/compare"
+        ),
+        "pathParameters": {},
     }
-    response = control_api.lambda_handler(event, None)
-    
-    assert response["statusCode"] == 400
-    body = json.loads(response["body"])
-    assert body["message"] == "runId is required to compare"
+
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
+
+    assert (
+        response["statusCode"]
+        == 400
+    )
+
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["message"]
+        == "runId is required to compare"
+    )
 
 
-def test_compare_run_returns_404_for_missing_source(monkeypatch):
+def test_compare_run_returns_404_for_missing_source(
+    monkeypatch,
+):
     class NotFoundStepFunctions:
-        def describe_execution(self, executionArn):
-            error_response = {"Error": {"Code": "ExecutionDoesNotExist"}}
-            raise ClientError(error_response, "DescribeExecution")
+        def describe_execution(
+            self,
+            executionArn,
+        ):
+            error_response = {
+                "Error": {
+                    "Code": "ExecutionDoesNotExist"
+                }
+            }
 
-    monkeypatch.setattr(control_api, "stepfunctions", NotFoundStepFunctions())
+            raise ClientError(
+                error_response,
+                "DescribeExecution",
+            )
+
+    monkeypatch.setattr(
+        control_api,
+        "stepfunctions",
+        NotFoundStepFunctions(),
+    )
 
     event = {
         "httpMethod": "POST",
-        "resource": "/runs/{runId}/compare",
-        "pathParameters": {"runId": "missing_run_123"}
+        "resource": (
+            "/runs/{runId}/compare"
+        ),
+        "pathParameters": {
+            "runId": "missing_run_123"
+        },
     }
 
-    response = control_api.lambda_handler(event, None)
-    
-    assert response["statusCode"] == 404
-    body = json.loads(response["body"])
-    assert body["message"] == "Source run not found"
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
+
+    assert (
+        response["statusCode"]
+        == 404
+    )
+
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["message"]
+        == "Source run not found"
+    )
 
 
 def test_compare_run_is_idempotent_for_same_client_token(
@@ -807,10 +1218,10 @@ def test_compare_run_is_idempotent_for_same_client_token(
     source_fault_plan = {
         "faults": [
             {
-                "type":
-                    "AFTER_SIDE_EFFECT_TIMEOUT",
-                "target":
-                    "ChargePayment",
+                "type": (
+                    "AFTER_SIDE_EFFECT_TIMEOUT"
+                ),
+                "target": "ChargePayment",
                 "attempt": 1,
             }
         ]
@@ -827,12 +1238,11 @@ def test_compare_run_is_idempotent_for_same_client_token(
         "orderId": "source_order_001",
         "eventId": "source_event_001",
         "workflowVersion": "buggy",
-        "faultPlanId":
-            "payment-ack-lost-v1",
-        "faultPlan":
-            source_fault_plan,
-        "faultPlanHash":
-            source_hash,
+        "faultPlanId": (
+            "payment-ack-lost-v1"
+        ),
+        "faultPlan": source_fault_plan,
+        "faultPlanHash": source_hash,
         "sku": "SKU-001",
     }
 
@@ -849,25 +1259,17 @@ def test_compare_run_is_idempotent_for_same_client_token(
                 "source_run_001"
             ):
                 return {
-                    "executionArn":
-                        executionArn,
-                    "status":
-                        "SUCCEEDED",
-                    "input":
-                        json.dumps(
-                            source_input
-                        ),
+                    "executionArn": executionArn,
+                    "status": "SUCCEEDED",
+                    "input": json.dumps(
+                        source_input
+                    ),
                 }
 
-            # Reading the comparison execution
-            # after ExecutionAlreadyExists.
             return {
-                "executionArn":
-                    executionArn,
-                "status":
-                    "SUCCEEDED",
-                "input":
-                    "{}",
+                "executionArn": executionArn,
+                "status": "SUCCEEDED",
+                "input": "{}",
             }
 
         def start_execution(
@@ -878,7 +1280,9 @@ def test_compare_run_is_idempotent_for_same_client_token(
                 kwargs
             )
 
-            if len(self.start_calls) == 1:
+            if len(
+                self.start_calls
+            ) == 1:
                 return {
                     "executionArn": (
                         "arn:aws:states:"
@@ -893,16 +1297,20 @@ def test_compare_run_is_idempotent_for_same_client_token(
             raise ClientError(
                 {
                     "Error": {
-                        "Code":
-                            "ExecutionAlreadyExists",
-                        "Message":
-                            "Execution already exists",
+                        "Code": (
+                            "ExecutionAlreadyExists"
+                        ),
+                        "Message": (
+                            "Execution already exists"
+                        ),
                     }
                 },
                 "StartExecution",
             )
 
-    fake_sf = IdempotentStepFunctions()
+    fake_sf = (
+        IdempotentStepFunctions()
+    )
 
     monkeypatch.setattr(
         control_api,
@@ -925,16 +1333,17 @@ def test_compare_run_is_idempotent_for_same_client_token(
 
     event = {
         "httpMethod": "POST",
-        "resource":
-            "/runs/{runId}/compare",
+        "resource": (
+            "/runs/{runId}/compare"
+        ),
         "pathParameters": {
-            "runId":
-                "source_run_001",
+            "runId": "source_run_001",
         },
         "body": json.dumps(
             {
-                "clientRequestToken":
-                    "same-token-001",
+                "clientRequestToken": (
+                    "same-token-001"
+                ),
             }
         ),
     }
@@ -953,8 +1362,15 @@ def test_compare_run_is_idempotent_for_same_client_token(
         )
     )
 
-    assert first_response["statusCode"] == 202
-    assert second_response["statusCode"] == 202
+    assert (
+        first_response["statusCode"]
+        == 202
+    )
+
+    assert (
+        second_response["statusCode"]
+        == 202
+    )
 
     first_body = json.loads(
         first_response["body"]
@@ -993,9 +1409,11 @@ def test_compare_run_is_idempotent_for_same_client_token(
         == "fixed"
     )
 
-    # Both attempts used the same Step
-    # Functions execution name.
-    assert len(fake_sf.start_calls) == 2
+    # Both attempts used the same Step Functions
+    # execution name.
+    assert len(
+        fake_sf.start_calls
+    ) == 2
 
     assert (
         fake_sf.start_calls[0]["name"]
@@ -1004,10 +1422,133 @@ def test_compare_run_is_idempotent_for_same_client_token(
 
 
 # ============================================================
-# NEW AUTHORIZATION TESTS
+# Authorization tests
 # ============================================================
 
-def test_post_requires_demo_token_when_configured(monkeypatch):
+def test_public_demo_mode_allows_request_without_token(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        control_api,
+        "PUBLIC_DEMO_MODE",
+        True,
+    )
+
+    monkeypatch.setattr(
+        control_api,
+        "DEMO_TOKEN",
+        "",
+    )
+
+    class DummyStepFunctions:
+        def start_execution(
+            self,
+            **kwargs,
+        ):
+            return {
+                "executionArn": (
+                    "arn:aws:states:"
+                    "us-east-1:"
+                    "123456789012:"
+                    "execution:"
+                    "CheckoutStateMachine:"
+                    f"{kwargs['name']}"
+                )
+            }
+
+    monkeypatch.setattr(
+        control_api,
+        "stepfunctions",
+        DummyStepFunctions(),
+    )
+
+    event = {
+        "httpMethod": "POST",
+        "path": "/runs",
+        "headers": {},
+        "body": json.dumps(
+            {
+                "workflowVersion": "buggy",
+                "faultPlanId": (
+                    "payment-ack-lost-v1"
+                ),
+            }
+        ),
+    }
+
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
+
+    assert (
+        response["statusCode"]
+        == 202
+    )
+
+
+def test_protected_mode_fails_closed_without_demo_token(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        control_api,
+        "PUBLIC_DEMO_MODE",
+        False,
+    )
+
+    monkeypatch.setattr(
+        control_api,
+        "DEMO_TOKEN",
+        "",
+    )
+
+    event = {
+        "httpMethod": "POST",
+        "path": "/runs",
+        "headers": {},
+        "body": json.dumps(
+            {
+                "workflowVersion": "buggy",
+                "faultPlanId": (
+                    "payment-ack-lost-v1"
+                ),
+            }
+        ),
+    }
+
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
+
+    assert (
+        response["statusCode"]
+        == 401
+    )
+
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["message"]
+        == "Unauthorized"
+    )
+
+
+def test_post_requires_demo_token_when_configured(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        control_api,
+        "PUBLIC_DEMO_MODE",
+        False,
+    )
+
     monkeypatch.setattr(
         control_api,
         "DEMO_TOKEN",
@@ -1017,35 +1558,112 @@ def test_post_requires_demo_token_when_configured(monkeypatch):
     event = {
         "httpMethod": "POST",
         "path": "/runs",
-        "headers": {}, # Missing x-demo-token
+        "headers": {},
         "body": json.dumps(
             {
                 "workflowVersion": "buggy",
-                "faultPlanId": "payment-ack-lost-v1",
+                "faultPlanId": (
+                    "payment-ack-lost-v1"
+                ),
             }
         ),
     }
 
-    response = control_api.lambda_handler(event, None)
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
 
-    assert response["statusCode"] == 401
-    body = json.loads(response["body"])
-    assert body["message"] == "Unauthorized"
+    assert (
+        response["statusCode"]
+        == 401
+    )
+
+    body = json.loads(
+        response["body"]
+    )
+
+    assert (
+        body["message"]
+        == "Unauthorized"
+    )
 
 
-def test_post_allows_request_with_valid_demo_token(monkeypatch):
+def test_post_rejects_invalid_demo_token(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        control_api,
+        "PUBLIC_DEMO_MODE",
+        False,
+    )
+
     monkeypatch.setattr(
         control_api,
         "DEMO_TOKEN",
         "test-demo-token-1234567890",
     )
 
-    # Mock stepfunctions so the test doesn't try to make real AWS calls 
-    # when authorization succeeds and start_run triggers.
+    event = {
+        "httpMethod": "POST",
+        "path": "/runs",
+        "headers": {
+            "x-demo-token": "wrong-token"
+        },
+        "body": json.dumps(
+            {
+                "workflowVersion": "buggy",
+                "faultPlanId": (
+                    "payment-ack-lost-v1"
+                ),
+            }
+        ),
+    }
+
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
+
+    assert (
+        response["statusCode"]
+        == 401
+    )
+
+
+def test_post_allows_request_with_valid_demo_token(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        control_api,
+        "PUBLIC_DEMO_MODE",
+        False,
+    )
+
+    monkeypatch.setattr(
+        control_api,
+        "DEMO_TOKEN",
+        "test-demo-token-1234567890",
+    )
+
     class DummyStepFunctions:
-        def start_execution(self, **kwargs):
+        def start_execution(
+            self,
+            **kwargs,
+        ):
             return {
-                "executionArn": "arn:aws:states:us-east-1:123456789012:execution:CheckoutStateMachine:test"
+                "executionArn": (
+                    "arn:aws:states:"
+                    "us-east-1:"
+                    "123456789012:"
+                    "execution:"
+                    "CheckoutStateMachine:"
+                    f"{kwargs['name']}"
+                )
             }
 
     monkeypatch.setattr(
@@ -1058,18 +1676,97 @@ def test_post_allows_request_with_valid_demo_token(monkeypatch):
         "httpMethod": "POST",
         "path": "/runs",
         "headers": {
-            "x-demo-token": "test-demo-token-1234567890"
+            "x-demo-token": (
+                "test-demo-token-1234567890"
+            )
         },
         "body": json.dumps(
             {
                 "workflowVersion": "buggy",
-                "faultPlanId": "payment-ack-lost-v1",
+                "faultPlanId": (
+                    "payment-ack-lost-v1"
+                ),
             }
         ),
     }
 
-    response = control_api.lambda_handler(event, None)
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
 
-    # 202 Accepted indicates successful authorization and execution 
-    # rather than a 401 rejection.
-    assert response["statusCode"] == 202
+    assert (
+        response["statusCode"]
+        == 202
+    )
+
+
+def test_bearer_token_is_supported_in_protected_mode(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        control_api,
+        "PUBLIC_DEMO_MODE",
+        False,
+    )
+
+    monkeypatch.setattr(
+        control_api,
+        "DEMO_TOKEN",
+        "test-demo-token-1234567890",
+    )
+
+    class DummyStepFunctions:
+        def start_execution(
+            self,
+            **kwargs,
+        ):
+            return {
+                "executionArn": (
+                    "arn:aws:states:"
+                    "us-east-1:"
+                    "123456789012:"
+                    "execution:"
+                    "CheckoutStateMachine:"
+                    f"{kwargs['name']}"
+                )
+            }
+
+    monkeypatch.setattr(
+        control_api,
+        "stepfunctions",
+        DummyStepFunctions(),
+    )
+
+    event = {
+        "httpMethod": "POST",
+        "path": "/runs",
+        "headers": {
+            "Authorization": (
+                "Bearer "
+                "test-demo-token-1234567890"
+            )
+        },
+        "body": json.dumps(
+            {
+                "workflowVersion": "buggy",
+                "faultPlanId": (
+                    "payment-ack-lost-v1"
+                ),
+            }
+        ),
+    }
+
+    response = (
+        control_api.lambda_handler(
+            event,
+            None,
+        )
+    )
+
+    assert (
+        response["statusCode"]
+        == 202
+    )
