@@ -559,15 +559,17 @@ Browser Buggy → Fixed comparison verified
 
 ---
 
-## What we learned
+## Engineering evidence
 
-CounterFlow was built over four days during First Commit.
+CounterFlow includes additional documentation covering both the team’s learning process and the final deployed-system verification.
 
-Read our engineering retrospective:
+- 📘 [What We Learned in 4 Days](docs/LEARNINGS.md)  
+  Our four-day engineering retrospective covering AWS, retries, idempotency, observability, deployment, and team ownership.
 
-👉 [What We Learned in 4 Days](docs/LEARNINGS.md)
+- ✅ [Permanent Deployment Acceptance Evidence](docs/ACCEPTANCE_EVIDENCE.md)  
+  Final deployed-run evidence including Buggy and Fixed results, trace verification, shared fault hash, compare idempotency, and security checks.
 
-
+  
 ## Local setup
 
 ### Prerequisites
