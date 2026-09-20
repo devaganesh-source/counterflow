@@ -888,7 +888,7 @@ https://1wmhwskvlk.execute-api.us-east-1.amazonaws.com/dev/
 https://github.com/devaganesh-source/counterflow
 
 **Demo video:**  
-`TODO_AFTER_RECORDING`
+https://youtu.be/C0ld7J_j4d4
 
 ---
 
@@ -906,5 +906,5 @@ Permanent deployment:         COMPLETE
 Acceptance testing:           PASS
 Browser Buggy → Fixed flow:   PASS
 README / architecture:        COMPLETE
-Demo recording:               PENDING
+Demo recording:               COMPLETE
 ```
