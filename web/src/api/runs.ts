@@ -72,7 +72,15 @@ export interface CompareRunResponse {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+const PUBLIC_DEMO_MODE =
+  String(
+    import.meta.env.VITE_PUBLIC_DEMO_MODE ?? "false",
+  )
+    .trim()
+    .toLowerCase() === "true";
+
 const DEMO_TOKEN_KEY = "counterflow-demo-token";
+
 
 function getDemoToken(): string {
   const existing = sessionStorage.getItem(
@@ -95,19 +103,47 @@ function getDemoToken(): string {
     );
   }
 
-  sessionStorage.setItem(DEMO_TOKEN_KEY, token);
+  sessionStorage.setItem(
+    DEMO_TOKEN_KEY,
+    token,
+  );
+
   return token;
 }
+
+
+function getAuthHeaders(): Record<string, string> {
+  /*
+   * Public hackathon demo:
+   * No token is requested or sent.
+   *
+   * Protected deployments:
+   * Continue using the X-Demo-Token mechanism.
+   */
+  if (PUBLIC_DEMO_MODE) {
+    return {};
+  }
+
+  return {
+    "x-demo-token": getDemoToken(),
+  };
+}
+
 
 export class ApiError extends Error {
   status: number;
 
-  constructor(message: string, status: number) {
+  constructor(
+    message: string,
+    status: number,
+  ) {
     super(message);
+
     this.name = "ApiError";
     this.status = status;
   }
 }
+
 
 async function requestJson<T>(
   url: string,
@@ -116,7 +152,10 @@ async function requestJson<T>(
   let response: Response;
 
   try {
-    response = await fetch(url, options);
+    response = await fetch(
+      url,
+      options,
+    );
   } catch {
     throw new ApiError(
       "CounterFlow API is unavailable. Please try again.",
@@ -140,6 +179,15 @@ async function requestJson<T>(
       );
     }
 
+    if (response.status === 401) {
+      throw new ApiError(
+        PUBLIC_DEMO_MODE
+          ? "CounterFlow public demo access is currently unavailable."
+          : "Invalid or missing CounterFlow demo access token.",
+        401,
+      );
+    }
+
     const message =
       typeof data === "object" &&
       data !== null &&
@@ -157,19 +205,20 @@ async function requestJson<T>(
   return data as T;
 }
 
+
 export async function startRun(
   workflowVersion: WorkflowVersion,
 ): Promise<RunResponse> {
-  const token = getDemoToken();
-
   return requestJson<RunResponse>(
     `${API_BASE_URL}/runs`,
     {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json",
-        "x-demo-token": token,
+        ...getAuthHeaders(),
       },
+
       body: JSON.stringify({
         workflowVersion,
         faultPlanId: "payment-ack-lost-v1",
@@ -178,35 +227,35 @@ export async function startRun(
   );
 }
 
+
 export async function getRun(
   runId: string,
 ): Promise<RunResponse> {
-  const token = getDemoToken();
-
   return requestJson<RunResponse>(
     `${API_BASE_URL}/runs/${runId}`,
     {
       headers: {
-        "x-demo-token": token,
+        ...getAuthHeaders(),
       },
     },
   );
 }
 
+
 export async function compareRun(
   runId: string,
   clientRequestToken: string,
 ): Promise<CompareRunResponse> {
-  const token = getDemoToken();
-
   return requestJson<CompareRunResponse>(
     `${API_BASE_URL}/runs/${runId}/compare`,
     {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json",
-        "x-demo-token": token,
+        ...getAuthHeaders(),
       },
+
       body: JSON.stringify({
         clientRequestToken,
       }),
