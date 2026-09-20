@@ -21,17 +21,41 @@ CounterFlow makes that failure visible, reproducible, measurable, and comparable
 **Frontend:**  
 http://counterflow-demo-web-618042349623.s3-website-us-east-1.amazonaws.com
 
-CounterFlow protects mutation endpoints with a demo access token.
-
-For hackathon judging, use:
-
-demo access token : hj3+3sevYBcOF1dijFiXY/9/YAFLwM9QD6ikT3LVlC8=
-
 **API:**  
 https://1wmhwskvlk.execute-api.us-east-1.amazonaws.com/dev/
 
 **AWS stack:** `counterflow-demo`  
 **Region:** `us-east-1`
+
+### Public judging access
+
+The hackathon deployment is currently running in **public demo mode**, so judges can execute the complete CounterFlow workflow without credentials or setup.
+
+The public deployment is intentionally constrained:
+
+- simulated payment and inventory data only
+- predefined `buggy` and `fixed` workflow versions
+- allowlisted `payment-ack-lost-v1` fault plan
+- strict request validation
+- API Gateway throttling
+- DynamoDB TTL cleanup
+- no arbitrary Lambda execution
+- no arbitrary workflow execution
+
+CounterFlow also supports a protected mode using the `X-Demo-Token` authentication mechanism included in the codebase.
+
+### Try the live demo
+
+1. Select **Buggy**
+2. Keep **Payment acknowledgement lost** selected
+3. Click **Run resilience test**
+4. Observe `COMPLETED` but `VIOLATED`
+5. Verify `1 ORDER → 2 CHARGES`
+6. Observe the ₹999 overcharge
+7. Click **Compare with Fixed**
+8. Verify the same stored fault was replayed
+9. Observe `PaymentReused`
+10. Verify `1 ORDER → 1 CHARGE` and ₹0 overcharge
 
 The previous workshop deployment was intentionally left untouched while the permanent deployment was verified.
 
@@ -140,10 +164,10 @@ The following diagram shows how CounterFlow launches resilience experiments, orc
 ### Execution flow
 
 1. The React + Vite frontend starts a resilience test through Amazon API Gateway.
-2. The Control API validates the request, checks the demo token, and resolves an allowlisted fault plan.
+2. The Control API validates the request, applies the configured access mode, and resolves an allowlisted fault plan.
 3. AWS Step Functions orchestrates the checkout workflow and retry behavior.
 4. Lambda functions execute the business workflow: `CreateOrder → ReserveInventory → ChargePayment → ConfirmOrder`.
-5. DynamoDB stores business state, trace evidence, immutable fault-plan snapshots, and invariant-related data.
+5. DynamoDB stores business state, trace evidence, fault-plan snapshots, and invariant-related data.
 6. The deterministic Invariant Checker evaluates `ChargeAtMostOnce` and identifies the first failing prefix.
 7. The Control API returns the evidence to the frontend and can rerun the exact same stored fault against the Fixed implementation.
 
@@ -338,7 +362,9 @@ Example request:
 }
 ```
 
-Mutation requests require:
+In the public hackathon deployment, no authentication header is required.
+
+Protected deployments require:
 
 ```http
 X-Demo-Token: <demo-token>
@@ -385,12 +411,12 @@ Example request:
 
 The comparison:
 
-- uses the exact stored source fault plan,
-- preserves the canonical fault-plan hash,
-- runs the Fixed implementation,
-- uses the client request token for idempotency.
+- uses the exact stored source fault plan
+- preserves the canonical fault-plan hash
+- runs the Fixed implementation
+- uses the client request token for idempotency
 
-Repeated compare requests using the same source run and client request token return the same comparison run.
+Repeated compare requests using the same source run and client request token identify the same comparison run.
 
 ---
 
@@ -410,23 +436,27 @@ Buggy verdict
 Run same fault against Fixed
     ↓
 Side-by-side comparison
+    ↓
+Fixed verdict
 ```
 
 ### Visual semantics
 
 ```text
-Ice / neutral  → normal execution
-Amber          → deliberately injected fault
-Violet         → retry / replay / reuse
-Red            → invariant violation
-Green          → passed invariant
+Ice / neutral → normal execution
+Amber         → deliberately injected fault
+Violet        → retry / replay / reuse
+Red           → invariant violation
+Green         → passed invariant
 ```
 
 The Buggy result prioritizes:
 
 ```text
 1 ORDER → 2 CHARGES
+
 ₹999 overcharge
+
 first failing sequence
 ```
 
@@ -447,12 +477,13 @@ CounterFlow uses the following AWS services.
 | AWS service | Purpose |
 |---|---|
 | Amazon API Gateway | REST API for starting, reading, tracing, and comparing runs |
-| AWS Lambda | Control API and checkout business handlers |
+| AWS Lambda | Control API, invariant checker, and checkout business handlers |
 | AWS Step Functions | Checkout orchestration and retry behavior |
-| Amazon DynamoDB | Simulated business state, execution evidence, and immutable fault-plan data |
+| Amazon DynamoDB | Simulated business state, execution evidence, payment records, and fault-plan data |
 | Amazon CloudWatch | Lambda logs and operational visibility |
 | AWS CloudFormation / AWS SAM | Infrastructure as code and deployment |
 | Amazon S3 static website hosting | Permanent React/Vite frontend hosting |
+| AWS IAM | Scoped permissions between serverless components |
 
 Infrastructure is defined in:
 
@@ -470,33 +501,52 @@ statemachines/checkout.asl.json
 
 ## Security and operational safeguards
 
-The deployment includes:
+CounterFlow supports two access modes.
+
+### Protected mode
+
+Protected deployments use the `X-Demo-Token` authentication mechanism implemented by the Control API.
+
+When:
+
+```text
+PUBLIC_DEMO_MODE=false
+```
+
+requests require the configured demo token.
+
+If protected mode is enabled without a configured token, the API fails closed.
+
+### Public demo mode
+
+The permanent hackathon judging deployment is intentionally running in public demo mode so judges can test CounterFlow without shared credentials.
+
+Public access is constrained by:
 
 - allowlisted fault profiles
-- validation before workflow execution
-- mutation-route demo-token protection
+- strict workflow-version validation
+- predefined test scenarios
 - API Gateway throttling
 - DynamoDB TTL for temporary records
 - 7-day Lambda CloudWatch log retention
 - read-only DynamoDB access for the invariant checker
 - scoped IAM permissions
-- CORS configuration including `X-Demo-Token`
-- no AWS credentials stored in the frontend
+- no arbitrary Lambda execution
+- no arbitrary workflow execution
+- simulated payment and inventory data only
 
-The frontend keeps the demo access token only in browser `sessionStorage`.
+No AWS credentials or authentication secrets are stored in the frontend.
 
-The demo token was rotated after acceptance testing and is **not** stored in GitHub or `samconfig`.
-
-The demo token is not intended to replace a production identity system; it is a lightweight protection mechanism for the hackathon deployment.
+Public demo mode is intended only for the constrained hackathon judging environment and can be disabled for protected deployments.
 
 ---
 
 ## Testing
 
-The project contains:
+The project currently contains:
 
 ```text
-29 automated tests
+33 automated tests
 ```
 
 Coverage includes:
@@ -505,7 +555,7 @@ Coverage includes:
 - Buggy checkout with the retry fault
 - Fixed checkout without an injected fault
 - Fixed checkout with the same retry fault
-- invariant evaluation
+- deterministic invariant evaluation
 - confirmed-order payment postcondition
 - first failing prefix
 - business-impact calculation
@@ -518,7 +568,9 @@ Coverage includes:
 - compare idempotency
 - allowlisted fault-plan validation
 - request validation
-- demo-token protection
+- protected demo-token authentication
+- protected-mode fail-closed behavior
+- public-demo anonymous access
 
 Run the full test suite:
 
@@ -529,7 +581,7 @@ python -m pytest -q
 Expected:
 
 ```text
-29 passed
+33 passed
 ```
 
 Validate the SAM template:
@@ -555,11 +607,15 @@ npm run build
 Current verified release status:
 
 ```text
-29/29 tests passing
+33/33 tests passing
 SAM template valid
 SAM build successful
 Frontend production build successful
 Permanent AWS deployment verified
+Anonymous Buggy run verified
+Anonymous polling verified
+Anonymous Buggy → Fixed comparison verified
+Fixed PaymentReused behavior verified
 Browser Buggy → Fixed comparison verified
 ```
 
@@ -567,7 +623,7 @@ Browser Buggy → Fixed comparison verified
 
 ## Engineering evidence
 
-CounterFlow includes additional documentation covering both the team’s learning process and the final deployed-system verification.
+CounterFlow includes additional documentation covering both the team's learning process and the final deployed-system verification.
 
 - 📘 [What We Learned in 4 Days](docs/LEARNINGS.md)  
   Our four-day engineering retrospective covering AWS, retries, idempotency, observability, deployment, and team ownership.
@@ -575,7 +631,8 @@ CounterFlow includes additional documentation covering both the team’s learnin
 - ✅ [Permanent Deployment Acceptance Evidence](docs/ACCEPTANCE_EVIDENCE.md)  
   Final deployed-run evidence including Buggy and Fixed results, trace verification, shared fault hash, compare idempotency, and security checks.
 
-  
+---
+
 ## Local setup
 
 ### Prerequisites
@@ -605,6 +662,12 @@ python -m venv .venv
 ```
 
 Install the project/test dependencies required by the repository.
+
+For the current test suite:
+
+```bash
+python -m pip install pytest boto3
+```
 
 Run tests:
 
@@ -644,9 +707,44 @@ Recommended region:
 us-east-1
 ```
 
-The deployment requires a `DemoToken` parameter for mutation endpoints.
+CounterFlow supports two access configurations.
 
-Do **not** commit the real deployment token to the repository or expose it through a Vite build-time environment variable.
+### Protected deployment
+
+Use:
+
+```text
+PublicDemoMode=false
+DemoToken=<strong temporary secret>
+```
+
+Protected mode requires `X-Demo-Token`.
+
+If `PublicDemoMode=false` and no valid token is configured, the Control API rejects the request.
+
+For the frontend:
+
+```text
+VITE_PUBLIC_DEMO_MODE=false
+```
+
+### Public demo deployment
+
+For a constrained demonstration environment:
+
+```text
+PublicDemoMode=true
+```
+
+No demo token is required in this mode.
+
+For the frontend production build:
+
+```text
+VITE_PUBLIC_DEMO_MODE=true
+```
+
+Do **not** embed AWS credentials, permanent secrets, or reusable access tokens in the frontend.
 
 After backend deployment, use the CloudFormation `ApiUrl` output as:
 
@@ -685,39 +783,58 @@ GET  /runs/{runId}/trace
 POST /runs/{runId}/compare
 ```
 
-### Acceptance matrix
+### Public judging acceptance matrix
 
 | Scenario | Expected | Measured result |
 |---|---|---|
-| Unauthorized mutation request | HTTP 401 | ✅ HTTP 401 |
+| Anonymous Buggy run | Starts without credentials | ✅ Verified |
+| Anonymous run polling | Returns execution evidence | ✅ Verified |
 | Buggy / payment ACK lost | 2 committed charges, FAIL | ✅ 2 charges, FAILED |
 | Buggy business impact | ₹999 overcharge | ✅ ₹999 overcharge |
-| Trace endpoint | ordered trace + first violation | ✅ Verified |
+| First failing prefix | second payment localized | ✅ Sequence 9 |
+| Anonymous compare | Fixed run starts without credentials | ✅ Verified |
+| Fault-plan comparison | identical stored fault hash | ✅ Verified |
 | Fixed / same stored fault | 1 committed charge, PASS | ✅ 1 charge, PASSED |
 | Fixed retry behavior | `PaymentReused` | ✅ Verified |
 | Fixed business impact | ₹0 overcharge | ✅ ₹0 overcharge |
-| Fault-plan comparison | identical stored fault hash | ✅ Verified |
-| Repeated compare token | same comparison run | ✅ Verified |
 | Browser Buggy → Fixed flow | completes end-to-end | ✅ Verified |
 
-### Acceptance evidence
+Protected authentication behavior is covered separately by the automated test suite.
 
-**Browser Buggy run**
+### Latest public-demo acceptance evidence
+
+**Anonymous Buggy run**
 
 ```text
-f15f0dc3-7ba3-4e4d-a8d6-d691a2306604
+cfc3b501-655d-4fa8-a703-0ea45200324c
 ```
 
-**Backend Buggy run**
+Measured result:
 
 ```text
-3c497ed7-9051-4a5e-a6f0-3eb1e8fa9021
+Workflow: SUCCEEDED
+ChargeAtMostOnce: FAILED
+Committed charges: 2
+Expected amount: ₹999
+Actual charged: ₹1,998
+Overcharge: ₹999
+First failing sequence: 9
 ```
 
-**Fixed comparison run**
+**Anonymous Fixed comparison run**
 
 ```text
-d8502309-4ad2-52ad-89f9-57bdb16007f1
+7cd7da50-60c4-50b3-8f3f-370d3122a6a8
+```
+
+Measured result:
+
+```text
+ChargeAtMostOnce: PASSED
+Committed charges: 1
+Actual charged: ₹999
+Overcharge: ₹0
+PaymentReused: attempt 2
 ```
 
 **Shared fault SHA-256**
@@ -728,19 +845,42 @@ cc60363731e5ec0d7754ea6504579a6154639736830674be41f17249a3ea5329
 
 The same stored fault snapshot/hash was reused for the Fixed comparison.
 
-Repeating the same compare request token returned the same comparison run ID.
-
 ---
 
 ## Deployment acceptance fixes
 
-Final browser acceptance testing exposed three deployment-specific issues that were corrected:
+Browser and cloud acceptance testing exposed several deployment-specific issues that were corrected:
 
-1. API Gateway CORS needed `X-Demo-Token` in `AllowHeaders`.
-2. Frontend polling for `GET /runs/{runId}` needed to send the demo-token header.
+1. API Gateway CORS needed `X-Demo-Token` in `AllowHeaders` for protected deployments.
+2. Frontend polling needed consistent authentication support when protected mode is enabled.
 3. S3 static HTTP hosting did not reliably expose `crypto.randomUUID()`, so compare-token generation uses a compatibility fallback.
+4. A configurable public demo mode was added so hackathon judges can execute the constrained demo without shared credentials.
 
-These fixes were validated with the complete browser Buggy → Fixed comparison flow.
+The final judging flow was verified from a fresh browser session:
+
+```text
+Open live deployment
+        ↓
+Run Buggy workflow
+        ↓
+Workflow completes
+        ↓
+Invariant FAILED
+        ↓
+1 ORDER → 2 CHARGES
+        ↓
+Compare with Fixed
+        ↓
+Same stored fault verified
+        ↓
+PaymentReused
+        ↓
+Invariant PASSED
+        ↓
+1 ORDER → 1 CHARGE
+```
+
+The backend was also independently verified without authentication headers for run creation, polling, comparison, and Fixed-result retrieval.
 
 ---
 
@@ -771,12 +911,13 @@ Current limitations include:
 - one primary checkout workflow
 - one primary injected fault profile
 - one production invariant
-- simulated payments and inventory instead of external payment/inventory providers
+- simulated payments and inventory instead of external providers
 - no exhaustive exploration of distributed-system state space
 - no automatic discovery of arbitrary business invariants
 - no Bedrock dependency in the correctness path
-- demo-token protection rather than a full production authentication system
-- current S3 static website frontend uses HTTP
+- protected mode uses a lightweight demo-token mechanism rather than a full production identity system
+- the public judging deployment is intentionally constrained and is not a production authentication model
+- the current S3 static website frontend uses HTTP
 
 A passing result means:
 
@@ -823,6 +964,7 @@ Primary responsibilities:
 - automated tests
 - backend security and PRD hardening
 - technical architecture explanation
+- project coordination and final demo direction
 
 ### Siddharth — Builder B, delivery and experience
 
@@ -856,7 +998,9 @@ Primary responsibilities:
 ```text
 counterflow/
 ├── docs/
-│   └── counterflow-architecture.png
+│   ├── counterflow-architecture.png
+│   ├── LEARNINGS.md
+│   └── ACCEPTANCE_EVIDENCE.md
 │
 ├── services/
 │   ├── create_order/
@@ -877,7 +1021,8 @@ counterflow/
 │   └── integration/
 │
 ├── web/
-│   └── React + TypeScript frontend
+│   ├── src/
+│   └── .env.production
 │
 ├── template.yaml
 └── README.md
@@ -890,6 +1035,10 @@ counterflow/
 CounterFlow is built to support one precise claim:
 
 > We injected a reproducible failure after a simulated payment side effect. The Buggy workflow retried and produced two committed charges. CounterFlow's deterministic invariant checker identified the first failing trace prefix. After adding an idempotent conditional write, the exact same stored fault plan produced one committed charge and passed the invariant.
+
+The retry stayed.
+
+The duplicate charge didn't.
 
 ---
 
@@ -912,16 +1061,20 @@ https://youtu.be/gf7Z9jkUyX0?feature=shared
 ## Status
 
 ```text
-Core implementation:         COMPLETE
-PRD hardening:                COMPLETE
-Frontend polish:              COMPLETE
-Automated tests:              29/29 PASS
-SAM validation:               PASS
-SAM build:                    PASS
-Frontend production build:    PASS
-Permanent deployment:         COMPLETE
-Acceptance testing:           PASS
-Browser Buggy → Fixed flow:   PASS
-README / architecture:        COMPLETE
-Demo recording:               COMPLETE
+Core implementation:             COMPLETE
+PRD hardening:                   COMPLETE
+Frontend polish:                 COMPLETE
+Public judging access:           COMPLETE
+Automated tests:                 33/33 PASS
+SAM validation:                  PASS
+SAM build:                       PASS
+Frontend production build:       PASS
+Permanent deployment:            COMPLETE
+Anonymous backend acceptance:    PASS
+Acceptance testing:              PASS
+Browser Buggy → Fixed flow:      PASS
+README / architecture:           COMPLETE
+Learning documentation:          COMPLETE
+Acceptance evidence:             COMPLETE
+Demo recording:                  COMPLETE
 ```
