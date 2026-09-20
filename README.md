@@ -559,6 +559,15 @@ Browser Buggy → Fixed comparison verified
 
 ---
 
+## What we learned
+
+CounterFlow was built over four days during First Commit.
+
+Read our engineering retrospective:
+
+👉 [What We Learned in 4 Days](docs/LEARNINGS.md)
+
+
 ## Local setup
 
 ### Prerequisites
